@@ -13,4 +13,6 @@ jobs:
           fetch-depth: 1
 
       - name: Build test publish
+        env:
+          CIRCLECI: true
         run: ./build_test_publish.sh
