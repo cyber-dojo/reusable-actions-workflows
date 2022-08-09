@@ -2,6 +2,9 @@ name: Build, test, push to Dockerhub
 
 on:
   workflow_call:
+    secrets:
+      MERKELY_API_TOKEN:
+        required: true
 
 jobs:
   build:
