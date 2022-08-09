@@ -1,0 +1,16 @@
+name: Build, test, push to Dockerhub 
+
+on:
+  workflow_call:
+
+jobs:
+  build:
+    name: Build test publish
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+
+      - name: Build test publish
+        run: ./build_test_publish.sh
