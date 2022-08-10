@@ -16,7 +16,7 @@ on:
       CIRCLE_BUILD_URL:
         required: true
         type: string
-      BUILD_SCRIPT_NAME:
+      BUILD_COMMAND:
         required: true
         type: string
       tag:
@@ -75,7 +75,7 @@ jobs:
           CIRCLE_BUILD_URL: ${{ inputs.CIRCLE_BUILD_URL }}
         run: |
           echo "${DOCKER_PASS}" | docker login --username "${DOCKER_USER}" --password-stdin
-          ./${{ inputs.BUILD_SCRIPT_NAME }}
+          ./${{ inputs.BUILD_COMMAND }}
           docker tag cyberdojo/${{ inputs.service_name }}:${{ inputs.tag }} ${{ inputs.ecr_registry }}/${{ inputs.service_name }}:${{ inputs.tag }}
           docker push ${{ inputs.ecr_registry }}/${{ inputs.service_name }}:${{ inputs.tag }}
           docker logout
