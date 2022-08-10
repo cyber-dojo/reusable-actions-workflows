@@ -16,6 +16,9 @@ on:
       CIRCLE_BUILD_URL:
         required: true
         type: string
+      BUILD_SCRIPT_NAME:
+        required: true
+        type: string
 
 jobs:
   build:
@@ -36,5 +39,5 @@ jobs:
           CIRCLE_BUILD_URL: ${{ inputs.CIRCLE_BUILD_URL }}
         run: |
           echo "${DOCKER_PASS}" | docker login --username "${DOCKER_USER}" --password-stdin
-          ./build_test_publish.sh
+          ./${{ inputs.BUILD_SCRIPT_NAME }}
           docker logout
