@@ -9,6 +9,13 @@ on:
         required: true
       DOCKER_USER:
         required: true
+    inputs:
+      CIRCLE_BUILD_NUM:
+        required: true
+        type: string
+      CIRCLE_BUILD_URL:
+        required: true
+        type: string
 
 jobs:
   build:
@@ -25,8 +32,8 @@ jobs:
           MERKELY_API_TOKEN: ${{ secrets.MERKELY_API_TOKEN }}
           DOCKER_PASS: ${{ secrets.DOCKER_PASS }}
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
-          CIRCLE_BUILD_NUM: ${{github.run_number}}
-          CIRCLE_BUILD_URL: ${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}
+          CIRCLE_BUILD_NUM: ${{ inputs.CIRCLE_BUILD_NUM }}
+          CIRCLE_BUILD_URL: ${{ inputs.CIRCLE_BUILD_URL }}
         run: |
           echo "${DOCKER_PASS}" | docker login --username "${DOCKER_USER}" --password-stdin
           ./build_test_publish.sh
