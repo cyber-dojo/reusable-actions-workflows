@@ -36,7 +36,9 @@ on:
       circle_sha1:
         required: true
         type: string
-
+      circle_build_url:
+        required: true
+        type: string
 jobs:
   deploy:
     runs-on: ubuntu-20.04
@@ -99,6 +101,7 @@ jobs:
           KOLSI_STAGING_HOST: ${{ inputs.kosli_staging_host }}
           KOLSI_PRODUCTION_HOST: ${{ inputs.kosli_production_host }}
           CIRCLE_SHA1: ${{ inputs.circle_sha1 }}
+          CIRCLE_BUILD_URL: ${{ inputs.circle_build_url }}
         run: |
           ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME $KOLSI_STAGING_HOST
           ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME $KOLSI_PRODUCTION_HOST
