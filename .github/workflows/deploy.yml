@@ -21,6 +21,18 @@ on:
       environment_url:
         required: true
         type: string
+      cyber_dojo_env_name:
+        required: true
+        type: string
+      cyber_dojo_env_name_aws:
+        required: true
+        type: string
+      kosli_staging_host:
+        required: true
+        type: string
+      kosli_production_host:
+        required: true
+        type: string
 
 jobs:
   deploy:
@@ -76,3 +88,17 @@ jobs:
           TF_AUTO_APPLY_SAVED_PLAN: true
           TF_SKIP_BACKEND_INIT: true
         run: ./tf.sh apply plan.tfplan
+
+      - name: Log deployment to Kosli
+        env:
+          CYBER_DOJO_ENV_NAME: ${{ inputs.cyber_dojo_env_name }}
+          CYBER_DOJO_ENV_NAME_AWS: ${{ inputs.cyber_dojo_env_name_aws }}
+          KOLSI_STAGING_HOST: ${{ inputs.kosli_staging_host }}
+          KOLSI_PRODUCTION_HOST: ${{ inputs.kosli_production_host }}
+        run: |
+          ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME $KOLSI_STAGING_HOST
+          ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME $KOLSI_PRODUCTION_HOST
+          ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME_AWS $KOLSI_PRODUCTION_HOST
+          ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME_AWS $KOLSI_PRODUCTION_HOST
+
+
