@@ -33,6 +33,9 @@ on:
       kosli_production_host:
         required: true
         type: string
+      circle_sha1:
+        required: true
+        type: string
 
 jobs:
   deploy:
@@ -95,6 +98,7 @@ jobs:
           CYBER_DOJO_ENV_NAME_AWS: ${{ inputs.cyber_dojo_env_name_aws }}
           KOLSI_STAGING_HOST: ${{ inputs.kosli_staging_host }}
           KOLSI_PRODUCTION_HOST: ${{ inputs.kosli_production_host }}
+          CIRCLE_SHA1: ${{ inputs.circle_sha1 }}
         run: |
           ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME $KOLSI_STAGING_HOST
           ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME $KOLSI_PRODUCTION_HOST
