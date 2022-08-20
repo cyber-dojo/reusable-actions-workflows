@@ -24,9 +24,6 @@ on:
       environment_url:
         required: true
         type: string
-      cyber_dojo_env_name:
-        required: true
-        type: string
       cyber_dojo_env_name_aws:
         required: true
         type: string
@@ -100,15 +97,12 @@ jobs:
       - name: Log deployment to Kosli
         env:
           MERKELY_API_TOKEN: ${{ secrets.MERKELY_API_TOKEN }}
-          CYBER_DOJO_ENV_NAME: ${{ inputs.cyber_dojo_env_name }}
           CYBER_DOJO_ENV_NAME_AWS: ${{ inputs.cyber_dojo_env_name_aws }}
           KOSLI_STAGING_HOST: ${{ inputs.kosli_staging_host }}
           KOSLI_PRODUCTION_HOST: ${{ inputs.kosli_production_host }}
           CIRCLE_SHA1: ${{ inputs.circle_sha1 }}
           CIRCLE_BUILD_URL: ${{ inputs.circle_build_url }}
         run: |
-          ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME     $KOSLI_STAGING_HOST
-          ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME     $KOSLI_PRODUCTION_HOST
           ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME_AWS $KOSLI_STAGING_HOST
           ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME_AWS $KOSLI_PRODUCTION_HOST
 
