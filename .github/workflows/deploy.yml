@@ -107,9 +107,9 @@ jobs:
           CIRCLE_SHA1: ${{ inputs.circle_sha1 }}
           CIRCLE_BUILD_URL: ${{ inputs.circle_build_url }}
         run: |
-          ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME $KOSLI_STAGING_HOST
-          ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME $KOSLI_PRODUCTION_HOST
-          ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME_AWS $KOSLI_PRODUCTION_HOST
+          ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME     $KOSLI_STAGING_HOST
+          ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME     $KOSLI_PRODUCTION_HOST
+          ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME_AWS $KOSLI_STAGING_HOST
           ./.circleci/merkely_log_deployment.sh $CYBER_DOJO_ENV_NAME_AWS $KOSLI_PRODUCTION_HOST
 
 
