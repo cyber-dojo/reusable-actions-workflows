@@ -3,7 +3,7 @@ name: Deploy
 on:
   workflow_call:
     secrets:
-      MERKELY_API_TOKEN:
+      KOSLI_API_TOKEN:
         required: true
     inputs:
       tagged_image:
@@ -96,7 +96,7 @@ jobs:
       - name: Report deployment to Kosli
         env:
           KOSLI_OWNER: cyber-dojo
-          KOSLI_API_TOKEN: ${{ secrets.MERKELY_API_TOKEN }}
+          KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
           KOSLI_STAGING_HOST: ${{ inputs.kosli_staging_host }}
           KOSLI_PRODUCTION_HOST: ${{ inputs.kosli_production_host }}
           CYBER_DOJO_ENV_NAME_AWS: ${{ inputs.cyber_dojo_env_name_aws }}
