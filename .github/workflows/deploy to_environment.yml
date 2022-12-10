@@ -1,0 +1,109 @@
+name: Deploy
+
+on:
+  workflow_call:
+    secrets:
+      MERKELY_API_TOKEN:
+        required: true
+    inputs:
+      tagged_image:
+        required: true
+        type: string
+      AWS_ACCOUNT_ID:
+        required: true
+        type: string
+      AWS_REGION:
+        required: true
+        type: string
+      gh_actions_iam_role_name:
+        required: true
+        type: string
+      environment_name:
+        required: true
+        type: string
+      environment_url:
+        required: true
+        type: string
+      cyber_dojo_env_name_aws:
+        required: true
+        type: string
+      kosli_staging_host:
+        required: true
+        type: string
+      kosli_production_host:
+        required: true
+        type: string
+      commit_sha1:
+        required: true
+        type: string
+      ci_build_url:
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-20.04
+    environment:
+      name: ${{ inputs.environment_name }}
+      url: ${{ inputs.environment_url }}
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/${{ inputs.gh_actions_iam_role_name }}
+          aws-region: ${{ inputs.AWS_REGION }}
+          role-duration-seconds: 2400
+          role-session-name: ${{ github.event.repository.name }}
+
+      - name: Setup terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.1.5
+
+      - name: Init terraform
+        working-directory: deployment/terraform/
+        run: terraform init -backend=false
+
+      - name: Validate terraform
+        working-directory: deployment/terraform/
+        run: terraform validate -no-color
+
+      - name: Check terraform specs format
+        working-directory: deployment/terraform/
+        run: terraform fmt --recursive -check=true
+
+      - name: Run terraform plan, save plan to file
+        env:
+          TF_VAR_TAGGED_IMAGE: ${{ inputs.tagged_image }}
+        working-directory: deployment/terraform/
+        run: ./tf.sh plan -no-color -out plan.tfplan
+
+      - name: Apply terraform
+        working-directory: deployment/terraform/
+        env:
+          TF_AUTO_APPLY_SAVED_PLAN: true
+          TF_SKIP_BACKEND_INIT: true
+        run: ./tf.sh apply plan.tfplan
+
+      - name: Report deployment to Kosli
+        env:
+          KOSLI_OWNER: cyber-dojo
+          KOSLI_API_TOKEN: ${{ secrets.MERKELY_API_TOKEN }}
+          KOSLI_STAGING_HOST: ${{ inputs.kosli_staging_host }}
+          KOSLI_PRODUCTION_HOST: ${{ inputs.kosli_production_host }}
+          CYBER_DOJO_ENV_NAME_AWS: ${{ inputs.cyber_dojo_env_name_aws }}
+          COMMIT_SHA1: ${{ inputs.circle_sha1 }}
+          CI_BUILD_URL: ${{ inputs.circle_build_url }}
+        run: |
+          source ./sh/kosli.sh
+          kosli_expect_deployment $CYBER_DOJO_ENV_NAME_AWS $KOSLI_STAGING_HOST
+          kosli_expect_deployment $CYBER_DOJO_ENV_NAME_AWS $KOSLI_PRODUCTION_HOST
+
+
