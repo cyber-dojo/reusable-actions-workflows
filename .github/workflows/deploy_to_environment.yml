@@ -33,12 +33,7 @@ on:
       kosli_production_host:
         required: true
         type: string
-      commit_sha1:
-        required: true
-        type: string
-      ci_build_url:
-        required: true
-        type: string
+
 jobs:
   deploy:
     runs-on: ubuntu-20.04
@@ -99,8 +94,6 @@ jobs:
           KOSLI_STAGING_HOST: ${{ inputs.kosli_staging_host }}
           KOSLI_PRODUCTION_HOST: ${{ inputs.kosli_production_host }}
           CYBER_DOJO_ENV_NAME_AWS: ${{ inputs.cyber_dojo_env_name_aws }}
-          COMMIT_SHA1: ${{ inputs.circle_sha1 }}
-          CI_BUILD_URL: ${{ inputs.circle_build_url }}
         run: |
           source ./sh/kosli.sh
           kosli_expect_deployment $CYBER_DOJO_ENV_NAME_AWS $KOSLI_STAGING_HOST

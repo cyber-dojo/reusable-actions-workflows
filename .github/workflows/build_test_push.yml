@@ -1,4 +1,4 @@
-name: Build, test, push to Dockerhub 
+name: Build, test, push to Dockerhub
 
 on:
   workflow_call:
@@ -75,9 +75,10 @@ jobs:
       - name: Build test publish
         env:
           CIRCLECI: true
-          MERKELY_API_TOKEN: ${{ secrets.MERKELY_API_TOKEN }}
+          KOSLI_API_TOKEN: ${{ secrets.MERKELY_API_TOKEN }}
           DOCKER_PASS: ${{ secrets.DOCKER_PASS }}
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
+          MERKELY_API_TOKEN: ${{ secrets.MERKELY_API_TOKEN }}
           CIRCLE_BUILD_NUM: ${{ inputs.CIRCLE_BUILD_NUM }}
           CIRCLE_BUILD_URL: ${{ inputs.CIRCLE_BUILD_URL }}
         run: |
