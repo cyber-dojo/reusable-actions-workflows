@@ -42,7 +42,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-20.04
-    environment: 
+    environment:
       name: ${{ inputs.environment_name }}
       url: ${{ inputs.environment_url }}
     permissions:
@@ -74,34 +74,32 @@ jobs:
         with:
           terraform_version: 1.1.5
 
-      - name: Terraform init
+      - name: Init terraform
         working-directory: deployment/terraform/
         run: terraform init -backend=false
 
-      - name: Terraform validate
+      - name: Validate terraform
         working-directory: deployment/terraform/
         run: terraform validate -no-color
 
-      # Check terraform specs format
-      - name: Terraform fmt
+      - name: Check terraform specs format
         working-directory: deployment/terraform/
         run: terraform fmt --recursive -check=true
 
-      # Run terraform plan, save plan to file
-      - name: Terraform plan
-        env: 
+      - name: Run terraform plan, save plan to file
+        env:
           TF_VAR_TAGGED_IMAGE: ${{ inputs.tagged_image }}
         working-directory: deployment/terraform/
         run: ./tf.sh plan -no-color -out plan.tfplan
 
-      - name: Terraform apply
+      - name: Apply terraform
         working-directory: deployment/terraform/
         env:
           TF_AUTO_APPLY_SAVED_PLAN: true
           TF_SKIP_BACKEND_INIT: true
         run: ./tf.sh apply plan.tfplan
 
-      - name: Log deployment to Kosli
+      - name: Report deployment to Kosli
         env:
           KOSLI_OWNER: cyber-dojo
           KOSLI_API_TOKEN: ${{ secrets.MERKELY_API_TOKEN }}
