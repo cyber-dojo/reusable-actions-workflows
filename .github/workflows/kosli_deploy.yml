@@ -97,8 +97,8 @@ jobs:
         env:
           CYBER_DOJO_ENV_NAME_AWS: ${{ inputs.cyber_dojo_env_name_aws }}
           KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
-          KOSLI_HOST_STAGING: ${{ inputs.kosli_staging_host }}
-          KOSLI_HOST_PROD: ${{ inputs.kosli_production_host }}
+          KOSLI_HOST_STAGING: ${{ inputs.kosli_host_staging }}
+          KOSLI_HOST_PROD: ${{ inputs.kosli_host_production }}
           KOSLI_OWNER: cyber-dojo
         run: |
           source ./sh/kosli.sh
