@@ -1,7 +1,11 @@
 
-deploy.txt is the original deployment yaml file.
-It is slowly being replaced by
-deploy_to_environment.yml which relies on their
-being a ./sh/kosli.sh file which can be sourced
-to obtain access to the kosli_expect_deployment()
-function
+The original deployment yaml files are:
+- build_test_push.yml
+- deploy.txt 
+These contain circleci related code
+most of which (but not all) is unused.
+
+These are slowly being replaced by:
+- kosli_build_test_push.yml
+- kosli_deploy.yml 
+

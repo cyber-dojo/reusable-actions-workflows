@@ -6,16 +6,13 @@ on:
       KOSLI_API_TOKEN:
         required: true
     inputs:
-      tagged_image:
-        required: true
-        type: string
       AWS_ACCOUNT_ID:
         required: true
         type: string
       AWS_REGION:
         required: true
         type: string
-      gh_actions_iam_role_name:
+      cyber_dojo_env_name_aws:
         required: true
         type: string
       environment_name:
@@ -24,13 +21,16 @@ on:
       environment_url:
         required: true
         type: string
-      cyber_dojo_env_name_aws:
+      gh_actions_iam_role_name:
         required: true
         type: string
-      kosli_staging_host:
+      kosli_host_production:
         required: true
         type: string
-      kosli_production_host:
+      kosli_host_staging:
+        required: true
+        type: string
+      tagged_image:
         required: true
         type: string
 
@@ -41,8 +41,8 @@ jobs:
       name: ${{ inputs.environment_name }}
       url: ${{ inputs.environment_url }}
     permissions:
-      id-token: write
       contents: write
+      id-token: write
 
     steps:
       - name: setup kosli
@@ -58,10 +58,10 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/${{ inputs.gh_actions_iam_role_name }}
           aws-region: ${{ inputs.AWS_REGION }}
           role-duration-seconds: 2400
           role-session-name: ${{ github.event.repository.name }}
+          role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/${{ inputs.gh_actions_iam_role_name }}
 
       - name: Setup terraform
         uses: hashicorp/setup-terraform@v1
@@ -95,14 +95,14 @@ jobs:
 
       - name: Report deployment to Kosli
         env:
-          KOSLI_OWNER: cyber-dojo
-          KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
-          KOSLI_STAGING_HOST: ${{ inputs.kosli_staging_host }}
-          KOSLI_PRODUCTION_HOST: ${{ inputs.kosli_production_host }}
           CYBER_DOJO_ENV_NAME_AWS: ${{ inputs.cyber_dojo_env_name_aws }}
+          KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+          KOSLI_HOST_STAGING: ${{ inputs.kosli_staging_host }}
+          KOSLI_HOST_PROD: ${{ inputs.kosli_production_host }}
+          KOSLI_OWNER: cyber-dojo
         run: |
           source ./sh/kosli.sh
-          kosli_expect_deployment $CYBER_DOJO_ENV_NAME_AWS $KOSLI_STAGING_HOST
-          kosli_expect_deployment $CYBER_DOJO_ENV_NAME_AWS $KOSLI_PRODUCTION_HOST
+          kosli_expect_deployment ${CYBER_DOJO_ENV_NAME_AWS} ${KOSLI_HOST_STAGING}
+          kosli_expect_deployment ${CYBER_DOJO_ENV_NAME_AWS} ${KOSLI_HOST_PRODUCTION}
 
 
