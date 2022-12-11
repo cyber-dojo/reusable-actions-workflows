@@ -86,14 +86,7 @@ jobs:
         working-directory: deployment/terraform/
         run: ./tf.sh plan -no-color -out plan.tfplan
 
-      - name: Apply terraform
-        working-directory: deployment/terraform/
-        env:
-          TF_AUTO_APPLY_SAVED_PLAN: true
-          TF_SKIP_BACKEND_INIT: true
-        run: ./tf.sh apply plan.tfplan
-
-      - name: Report deployment to Kosli
+      - name: Report expected deployment to Kosli
         env:
           CYBER_DOJO_ENV_NAME_AWS: ${{ inputs.cyber_dojo_env_name_aws }}
           KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
@@ -104,5 +97,13 @@ jobs:
           source ./sh/kosli.sh
           kosli_expect_deployment ${CYBER_DOJO_ENV_NAME_AWS} ${KOSLI_HOST_STAGING}
           kosli_expect_deployment ${CYBER_DOJO_ENV_NAME_AWS} ${KOSLI_HOST_PRODUCTION}
+
+      - name: Apply terraform
+        working-directory: deployment/terraform/
+        env:
+          TF_AUTO_APPLY_SAVED_PLAN: true
+          TF_SKIP_BACKEND_INIT: true
+        run: ./tf.sh apply plan.tfplan
+
 
 

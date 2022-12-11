@@ -28,7 +28,7 @@ on:
       gh_actions_iam_role_name:
         required: true
         type: string
-      tag:
+      image_tag:
         required: true
         type: string
 
@@ -74,6 +74,6 @@ jobs:
         run: |
           echo "${DOCKER_PASS}" | docker login --username "${DOCKER_USER}" --password-stdin
           ./${{ inputs.BUILD_COMMAND }}
-          docker tag cyberdojo/${{ inputs.service_name }}:${{ inputs.tag }} ${{ inputs.ecr_registry }}/${{ inputs.service_name }}:${{ inputs.tag }}
-          docker push ${{ inputs.ecr_registry }}/${{ inputs.service_name }}:${{ inputs.tag }}
+          docker tag cyberdojo/${{ inputs.service_name }}:${{ inputs.image_tag }} ${{ inputs.ecr_registry }}/${{ inputs.service_name }}:${{ inputs.image_tag }}
+          docker push ${{ inputs.ecr_registry }}/${{ inputs.service_name }}:${{ inputs.image_tag }}
           docker logout
