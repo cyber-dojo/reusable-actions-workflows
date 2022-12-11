@@ -64,9 +64,9 @@ jobs:
           role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/${{ inputs.gh_actions_iam_role_name }}
 
       - name: Setup terraform
-        uses: hashicorp/setup-terraform@v1
+        uses: hashicorp/setup-terraform@v2
         with:
-          terraform_version: 1.1.5
+          terraform_version: 1.1.7
 
       - name: Init terraform
         working-directory: deployment/terraform/
