@@ -47,9 +47,10 @@ jobs:
           version:
             0.1.23
 
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
-          fetch-depth: 1
+          # Get full history for Kosli commit-interval harvesting
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
