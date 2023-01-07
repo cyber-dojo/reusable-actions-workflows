@@ -13,7 +13,7 @@ on:
       BUILD_COMMAND:
         required: true
         type: string
-      KOSLI_FLOW:
+      KOSLI_PIPELINE:
         required: true
         type: string
 
@@ -48,7 +48,7 @@ jobs:
           KOSLI_HOST_PRODUCTION: https://app.kosli.com
           KOSLI_OWNER: cyber-dojo
           KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
-          KOSLI_FLOW: ${{ inputs.KOSLI_FLOW }}
+          KOSLI_PIPELINE: ${{ inputs.KOSLI_PIPELINE }}
 
         run: |
           ./${{ inputs.BUILD_COMMAND }}
