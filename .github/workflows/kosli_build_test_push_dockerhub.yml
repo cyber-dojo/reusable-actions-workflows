@@ -13,10 +13,7 @@ on:
       BUILD_COMMAND:
         required: true
         type: string
-      service_name:
-        required: true
-        type: string
-      image_tag:
+      KOSLI_FLOW:
         required: true
         type: string
 
@@ -51,9 +48,10 @@ jobs:
           KOSLI_HOST_PRODUCTION: https://app.kosli.com
           KOSLI_OWNER: cyber-dojo
           KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+          KOSLI_FLOW: ${{ inputs.KOSLI_FLOW }}
 
         run: |
-          echo "${DOCKER_PASS}" | docker login --username "${DOCKER_USER}" --password-stdin
           ./${{ inputs.BUILD_COMMAND }}
-          docker push ${{ inputs.service_name }}:${{ inputs.image_tag }}
-          docker logout
+          # echo "${DOCKER_PASS}" | docker login --username "${DOCKER_USER}" --password-stdin
+          # docker push ${{ inputs.KOSLI_FLOW }}:${{ inputs.IMAGE_TAG }}
+          # docker logout
