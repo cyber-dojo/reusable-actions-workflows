@@ -71,7 +71,11 @@ jobs:
         env:
           DOCKER_PASS: ${{ secrets.DOCKER_PASS }}
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
+          KOSLI_HOST_STAGING: https://staging.app.kosli.com
+          KOSLI_HOST_PRODUCTION: https://app.kosli.com
+          KOSLI_OWNER: cyber-dojo
           KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+
         run: |
           echo "${DOCKER_PASS}" | docker login --username "${DOCKER_USER}" --password-stdin
           ./${{ inputs.BUILD_COMMAND }}
