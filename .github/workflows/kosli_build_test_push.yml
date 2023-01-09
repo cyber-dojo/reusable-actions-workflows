@@ -9,6 +9,8 @@ on:
         required: true
       KOSLI_API_TOKEN:
         required: true
+      SNYK_TOKEN:
+        required: false # change to true once Snyk is added to all pipelines
     inputs:
       AWS_ACCOUNT_ID:
         required: true
@@ -78,6 +80,7 @@ jobs:
           KOSLI_HOST_PRODUCTION: https://app.kosli.com
           KOSLI_OWNER: cyber-dojo
           KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
         run: |
           echo "${DOCKER_PASS}" | docker login --username "${DOCKER_USER}" --password-stdin
