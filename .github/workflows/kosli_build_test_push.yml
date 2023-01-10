@@ -47,7 +47,7 @@ jobs:
         uses: kosli-dev/setup-cli-action@v1
         with:
           version:
-            0.1.31
+            0.1.32
 
       - name: setup Snyk
         uses: snyk/actions/setup@master
