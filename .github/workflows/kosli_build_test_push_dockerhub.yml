@@ -30,7 +30,7 @@ jobs:
         uses: kosli-dev/setup-cli-action@v1
         with:
           version:
-            0.1.32
+            2.0.0-rc1
 
       - name: setup Snyk
         uses: snyk/actions/setup@master
@@ -46,7 +46,7 @@ jobs:
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
           KOSLI_HOST_STAGING: https://staging.app.kosli.com
           KOSLI_HOST_PRODUCTION: https://app.kosli.com
-          KOSLI_OWNER: cyber-dojo
+          KOSLI_ORG: cyber-dojo
           KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
           KOSLI_FLOW: ${{ inputs.KOSLI_FLOW }}
 
