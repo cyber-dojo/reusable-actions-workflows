@@ -15,12 +15,6 @@ on:
       cyber_dojo_env_name_aws:
         required: true
         type: string
-      environment_name:
-        required: true
-        type: string
-      environment_url:
-        required: true
-        type: string
       gh_actions_iam_role_name:
         required: true
         type: string
@@ -33,59 +27,31 @@ on:
       tagged_image:
         required: true
         type: string
+      environment_name:
+        required: true
+        type: string
+      environment_url:
+        required: true
+        type: string
+
 
 jobs:
-  deploy:
+  report-expected-deployment:
     runs-on: ubuntu-20.04
     environment:
       name: ${{ inputs.environment_name }}
       url: ${{ inputs.environment_url }}
-    permissions:
-      contents: write
-      id-token: write
-
     steps:
-      - name: setup kosli
-        uses: kosli-dev/setup-cli-action@v1
-        with:
-          version:
-            2.0.0
-
       - uses: actions/checkout@v3
         with:
           ref: main
           fetch-depth: 1
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1-node16
+      - name: setup kosli
+        uses: kosli-dev/setup-cli-action@v1
         with:
-          aws-region: ${{ inputs.AWS_REGION }}
-          role-duration-seconds: 2400
-          role-session-name: ${{ github.event.repository.name }}
-          role-to-assume: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/${{ inputs.gh_actions_iam_role_name }}
-
-      - name: Setup terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.1.7
-
-      - name: Init terraform
-        working-directory: deployment/terraform/
-        run: terraform init -backend=false
-
-      - name: Validate terraform
-        working-directory: deployment/terraform/
-        run: terraform validate -no-color
-
-      - name: Check terraform specs format
-        working-directory: deployment/terraform/
-        run: terraform fmt --recursive -check=true
-
-      - name: Run terraform plan, save plan to file
-        env:
-          TF_VAR_TAGGED_IMAGE: ${{ inputs.tagged_image }}
-        working-directory: deployment/terraform/
-        run: ./tf.sh plan -no-color -out plan.tfplan
+          version:
+            2.0.0
 
       - name: Report expected deployment to Kosli
         env:
@@ -99,12 +65,15 @@ jobs:
           kosli_expect_deployment ${CYBER_DOJO_ENV_NAME_AWS} ${KOSLI_HOST_STAGING}
           kosli_expect_deployment ${CYBER_DOJO_ENV_NAME_AWS} ${KOSLI_HOST_PRODUCTION}
 
-      - name: Apply terraform
-        working-directory: deployment/terraform/
-        env:
-          TF_AUTO_APPLY_SAVED_PLAN: true
-          TF_SKIP_BACKEND_INIT: true
-        run: ./tf.sh apply plan.tfplan
-
-
-
+  deploy:
+    needs: [ report-expected-deployment ]
+    uses: fivexl/gh-workflow-tf-plan-apply/.github/workflows/base.yml@v0.0.7
+    with:
+      aws_region: ${{ inputs.AWS_REGION }}
+      aws_role_arn: arn:aws:iam::${{ inputs.AWS_ACCOUNT_ID }}:role/${{ inputs.gh_actions_iam_role_name }}
+      aws_default_region: ${{ inputs.AWS_REGION }}
+      aws_role_duration: 900
+      working_directory: deployment/terraform/
+      tf_apply: 'true'
+      tf_version: v1.4.5
+      tf_additional_env_vars: '{"TF_VAR_TAGGED_IMAGE": "${{ inputs.tagged_image }}"}'
