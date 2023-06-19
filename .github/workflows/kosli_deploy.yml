@@ -67,6 +67,9 @@ jobs:
 
   deploy:
     needs: [ report-expected-deployment ]
+    permissions:
+      id-token: write
+      contents: write
     uses: fivexl/gh-workflow-tf-plan-apply/.github/workflows/base.yml@v0.0.7
     with:
       aws_region: ${{ inputs.AWS_REGION }}
