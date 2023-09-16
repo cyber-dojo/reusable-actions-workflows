@@ -1,6 +1,9 @@
 # reusable-actions-workflows
 
 Used by cyber-dojo Org repos in their Github Actions workflows.
+- kosli_build_test.yml
+  - Does not push image to dockerhub registry
+  - Intended for base images
 - kosli_build_test_push.yml
   - Calls ./build_test_push.sh 
 - kosli_deploy.yml
