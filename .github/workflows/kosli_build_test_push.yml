@@ -46,10 +46,10 @@ jobs:
     steps:
 
       - name: setup kosli
-        uses: kosli-dev/setup-cli-action@v1
+        uses: kosli-dev/setup-cli-action@v2
         with:
-          version:
-            2.0.0
+          version: ${{ vars.KOSLI_CLI_VERSION }}
+
 
       - name: setup Snyk
         uses: snyk/actions/setup@master
