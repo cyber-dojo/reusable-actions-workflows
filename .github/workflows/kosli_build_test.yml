@@ -30,12 +30,12 @@ jobs:
       contents: write
     steps:
 
-      - name: setup kosli
+      - name: Setup kosli
         uses: kosli-dev/setup-cli-action@v2
         with:
           version: ${{ vars.KOSLI_CLI_VERSION }}
 
-      - name: setup Snyk
+      - name: Setup Snyk
         uses: snyk/actions/setup@master
 
       - uses: actions/checkout@v3
