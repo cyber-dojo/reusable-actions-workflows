@@ -9,6 +9,8 @@ on:
         required: true
       KOSLI_API_TOKEN:
         required: true
+      KOSLI_API_TOKEN_STAGING:
+        required: true
       SNYK_TOKEN:
         required: false # change to true once Snyk is added to all pipelines
     inputs:
@@ -29,17 +31,15 @@ jobs:
     steps:
 
       - name: setup kosli
-        uses: kosli-dev/setup-cli-action@v1
+        uses: kosli-dev/setup-cli-action@v2
         with:
-          version:
-            2.0.0
+          version: ${{ vars.KOSLI_CLI_VERSION }}
 
       - name: setup Snyk
         uses: snyk/actions/setup@master
 
       - uses: actions/checkout@v3
         with:
-          # Get full history for Kosli commit-interval harvesting
           fetch-depth: 0
 
       - name: Build test publish
@@ -50,6 +50,7 @@ jobs:
           KOSLI_HOST_PRODUCTION: https://app.kosli.com
           KOSLI_ORG: cyber-dojo
           KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+          KOSLI_API_TOKEN_STAGING: ${{ secrets.KOSLI_API_TOKEN_STAGING }}
           KOSLI_FLOW: ${{ inputs.KOSLI_FLOW }}
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
