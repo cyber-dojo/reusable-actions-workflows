@@ -45,7 +45,7 @@ jobs:
       url: ${{ inputs.environment_url }}
     steps:
         run:
-          # Just to get environment:name and environment:url
+          echo Just to get environment:name and environment:url
 
   deploy:
     needs: [ report-expected-deployment ]
