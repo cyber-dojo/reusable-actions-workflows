@@ -38,34 +38,14 @@ on:
 
 
 jobs:
-  report-expected-deployment:
+  pre-deployment:
     runs-on: ubuntu-20.04
     environment:
       name: ${{ inputs.environment_name }}
       url: ${{ inputs.environment_url }}
     steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: main
-          fetch-depth: 1
-
-      - name: Setup kosli
-        uses: kosli-dev/setup-cli-action@v2
-        with:
-          version: ${{ vars.KOSLI_CLI_VERSION }}
-
-      - name: Report expected deployment to Kosli
-        env:
-          CYBER_DOJO_ENV_NAME_AWS: ${{ inputs.cyber_dojo_env_name_aws }}
-          KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
-          KOSLI_API_TOKEN_STAGING: ${{ secrets.KOSLI_API_TOKEN_STAGING }}
-          KOSLI_HOST_STAGING: ${{ inputs.kosli_host_staging }}
-          KOSLI_HOST_PRODUCTION: ${{ inputs.kosli_host_production }}
-          KOSLI_ORG: cyber-dojo
-        run: |
-          source ./sh/kosli.sh
-          kosli_expect_deployment ${CYBER_DOJO_ENV_NAME_AWS} ${KOSLI_HOST_STAGING}    ${KOSLI_API_TOKEN_STAGING}
-          kosli_expect_deployment ${CYBER_DOJO_ENV_NAME_AWS} ${KOSLI_HOST_PRODUCTION} ${KOSLI_API_TOKEN}
+        run:
+          # Just to get environment:name and environment:url
 
   deploy:
     needs: [ report-expected-deployment ]
