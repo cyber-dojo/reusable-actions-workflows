@@ -49,7 +49,7 @@ jobs:
           echo Just to get environment:name and environment:url
 
   deploy:
-    needs: [ report-expected-deployment ]
+    needs: [ pre-deployment ]
     permissions:
       id-token: write
       contents: write
