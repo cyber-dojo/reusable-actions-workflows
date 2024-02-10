@@ -44,7 +44,8 @@ jobs:
       name: ${{ inputs.environment_name }}
       url: ${{ inputs.environment_url }}
     steps:
-        run:
+      - name: Dummy job just to get github environment yaml
+        run: |
           echo Just to get environment:name and environment:url
 
   deploy:
