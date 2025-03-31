@@ -2,6 +2,10 @@ name: Secure docker build
 
 on:
   workflow_call:
+    outputs:
+      digest:
+        description: The SHA256 image digest
+        value: ${{ jobs.secure-build.outputs.digest }}
     inputs:
       # inputs for actions/checkout@v4
       CHECKOUT_REPOSITORY:
