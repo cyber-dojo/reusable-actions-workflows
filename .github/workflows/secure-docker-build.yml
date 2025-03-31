@@ -112,12 +112,18 @@ jobs:
           push: true
           tags: ${{ inputs.IMAGE_TAGS }}
           build-args: ${{ inputs.IMAGE_BUILD_ARGS }}
+          provenance: mode=max
+          sbom: true
 
       - name: Sanitize digest
         id: sanitize-digest
         run: |
           DIGEST=$(echo ${{ steps.docker_build.outputs.digest }} | sed 's/^sha256://')
           echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
+
+      - name: Get build metadata
+        run:
+          echo ${{ steps.docker_build.outputs.metadata }} | jq .
 
       - name: Setup Kosli CLI
         if: ${{ success() || failure() }}
