@@ -24,11 +24,11 @@ jobs:
       CHECKOUT_REPOSITORY: cyber-dojo/saver
       CHECKOUT_REF: HEAD
       CHECKOUT_DEPTH: 1
-      TAGS: ${{ env.IMAGE_NAME }}
-      BUILD_ARGS: |
+      IMAGE_REFERENCE_NAME: saver
+      IMAGE_TAGS: ${{ env.IMAGE_NAME }}
+      IMAGE_BUILD_ARGS: |
         COMMIT_SHA=${{ github.sha }}
         BASE_IMAGE=${{ inputs.BASE_IMAGE }}
-      NAME: saver
       KOSLI_FLOW: saver-ci
       KOSLI_TRAIL: ${{ env.KOSLI_TRAIL }}
     secrets:

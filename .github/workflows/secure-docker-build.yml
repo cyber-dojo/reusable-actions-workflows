@@ -15,13 +15,13 @@ on:
         type: string
 
       # inputs for docker/build-push-action@v6
-      TAGS:
+      IMAGE_REFERENCE_NAME:  # eg saver
         required: true
         type: string
-      BUILD_ARGS:
+      IMAGE_TAGS:            # eg
         required: true
         type: string
-      NAME:
+      IMAGE_BUILD_ARGS:      # eg
         required: true
         type: string
 
@@ -104,8 +104,8 @@ jobs:
           context: .
           no-cache: true
           push: true
-          tags: ${{ inputs.TAGS }}
-          build-args: ${{ inputs.BUILD_ARGS }}
+          tags: ${{ inputs.IMAGE_TAGS }}
+          build-args: ${{ inputs.IMAGE_BUILD_ARGS }}
 
       - name: Setup Kosli CLI
         if: ${{ success() || failure() }}
@@ -116,8 +116,8 @@ jobs:
       - name: Attest artifact to Kosli
         if: ${{ success() || failure() }}
         run:
-          kosli attest artifact "${{ inputs.TAGS }}"
+          kosli attest artifact "${{ inputs.IMAGE_TAGS }}"
             --fingerprint="${{ steps.docker_build.outputs.digest }}"
-            --name="${{ inputs.NAME }}"
+            --name="${{ inputs.IMAGE_REFERENCE_NAME }}"
 
 
