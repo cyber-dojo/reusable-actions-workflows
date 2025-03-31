@@ -1,4 +1,4 @@
-name: Live Snyk scans
+name: Secure docker build
 
 on:
   workflow_call:
