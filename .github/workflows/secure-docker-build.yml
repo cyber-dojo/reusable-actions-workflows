@@ -76,7 +76,7 @@ jobs:
     needs: []
     runs-on: ubuntu-latest
     outputs:
-      digest: ${{ steps.docker_build.outputs.digest }}
+      digest: ${{ steps.sanitize-digest.outputs.digest }}
     permissions:
       id-token: write
       contents: write
@@ -109,6 +109,12 @@ jobs:
           tags: ${{ inputs.IMAGE_TAGS }}
           build-args: ${{ inputs.IMAGE_BUILD_ARGS }}
 
+      - name: Sanitize digest
+        id: sanitize-digest
+        run:
+          DIGEST=$(echo ${{ steps.docker_build.outputs.digest }} | sed 's/^sha256://')
+          echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
+
       - name: Setup Kosli CLI
         if: ${{ success() || failure() }}
         uses: kosli-dev/setup-cli-action@v2
@@ -117,9 +123,7 @@ jobs:
 
       - name: Attest artifact to Kosli
         if: ${{ success() || failure() }}
-        run:
-          kosli attest artifact "${{ inputs.IMAGE_TAGS }}"
-            --fingerprint="${{ steps.docker_build.outputs.digest }}"
+        run: |
+          kosli attest artifact "${{ inputs.IMAGE_TAGS }}" \
+            --fingerprint="${{ steps.sanitize-digest.outputs.digest }}" \
             --name="${{ inputs.KOSLI_REFERENCE_NAME }}"
-
-
