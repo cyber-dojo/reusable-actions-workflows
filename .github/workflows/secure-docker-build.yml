@@ -126,7 +126,7 @@ jobs:
 
       - name: Get build metadata
         run: |
-          docker buildx imagetools inspect ${{ inputs.IMAGE_TAGS }}@{{ steps.docker_build.outputs.digest }} \
+          docker buildx imagetools inspect ${{ inputs.IMAGE_TAGS }}@${{ steps.docker_build.outputs.digest }} \
             --format "{{ json .Provenance.SLSA }}"
 
       - name: Setup Kosli CLI
