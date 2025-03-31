@@ -1,0 +1,70 @@
+name: Live Snyk scans
+
+on:
+  workflow_call:
+    inputs:
+      KOSLI_ENV:
+        required: true
+        type: string
+    secrets:
+      KOSLI_API_TOKEN:
+        required: true
+
+env:
+  KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+  KOSLI_DEBUG:     ${{ vars.KOSLI_DEBUG }}          # true/false
+  KOSLI_DRY_RUN:   ${{ vars.KOSLI_DRY_RUN }}        # true/false
+  KOSLI_HOST:      ${{ vars.KOSLI_HOST }}           # https://app.kosli.com
+  KOSLI_ORG:       ${{ vars.KOSLI_ORG }}            # cyber-dojo
+  KOSLI_FLOW:      ${{ vars.KOSLI_FLOW }}           # aws-snyk-scan
+  KOSLI_ENV:       ${{ inputs.KOSLI_ENV }}          # aws-beta | aws-prod
+
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+  AWS_REGION:     ${{ vars.AWS_REGION }}
+
+jobs:
+
+  secure-build:
+    needs: []
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    env:
+      KOSLI_TRAIL: ${{ matrix.repo_name }}-${{ matrix.artifact_fingerprint }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/gh_actions_live_snyk_scans
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 2400
+          role-session-name: ${{ github.event.repository.name }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup Snyk
+        uses: snyk/actions/setup@master
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ...
+
+      - name: Setup Kosli CLI
+        if: ${{ success() || failure() }}
+        uses: kosli-dev/setup-cli-action@v2
+        with:
+          version: ${{ vars.KOSLI_CLI_VERSION }}
+
+      - name: Attest artifact to Kosli
+        if: ${{ success() || failure() }}
+        run:
+          kosli attest artifact "${{ matrix.artifact_name }}"
+            --fingerprint="${{ matrix.artifact_fingerprint }}"
+            --name="${{ matrix.repo_name }}"
+
+

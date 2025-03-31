@@ -1,11 +1,7 @@
 # reusable-actions-workflows
 
 Used by cyber-dojo Org repos in their Github Actions workflows.
-- kosli_build_test.yml
-  - Does not push image to dockerhub registry
-  - Intended for base images
-- kosli_build_test_push.yml
-  - Calls ./build_test_push.sh 
+- secure-build.yml
 
 
 Typical use is like this:
@@ -20,11 +16,11 @@ on:
 
 jobs:
   build-test-push:
-    uses: cyber-dojo/reusable-actions-workflows/.github/workflows/kosli_build_test_push.yml@v0.0.5
+    uses: cyber-dojo/reusable-actions-workflows/.github/workflows/secure-build.yml@v0.0.5
     secrets:
       ...
     with:
-      BUILD_COMMAND: build_test_publish.sh
+      ...
 ```
 
 The @v0.0.5 refers to tags in this repo:
