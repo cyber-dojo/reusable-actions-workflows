@@ -125,8 +125,9 @@ jobs:
           echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
 
       - name: Get build metadata
-        run:
-          echo ${{ steps.docker_build.outputs.metadata }} | jq .
+        run: |
+          docker buildx imagetools inspect ${{ inputs.IMAGE_TAGS }}@{{ steps.docker_build.outputs.digest }} \
+            --format "{{ json .Provenance.SLSA }}"
 
       - name: Setup Kosli CLI
         if: ${{ success() || failure() }}
