@@ -111,7 +111,7 @@ jobs:
 
       - name: Sanitize digest
         id: sanitize-digest
-        run:
+        run: |
           DIGEST=$(echo ${{ steps.docker_build.outputs.digest }} | sed 's/^sha256://')
           echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
 
