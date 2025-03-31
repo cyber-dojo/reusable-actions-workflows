@@ -3,21 +3,68 @@ name: Live Snyk scans
 on:
   workflow_call:
     inputs:
-      KOSLI_ENV:
+      # inputs for actions/checkout@v4
+      CHECKOUT_REPOSITORY:
         required: true
         type: string
+      CHECKOUT_REF:
+        required: true
+        type: string
+      CHECKOUT_FETCH_DEPTH:
+        required: true
+        type: string
+
+      # inputs for docker/build-push-action@v6
+      TAGS:
+        required: true
+        type: string
+      BUILD_ARGS:
+        required: true
+        type: string
+      NAME:
+        required: true
+        type: string
+
+      # inputs for [kosli attest artifact]
+      KOSLI_CLI_VERSION:
+        required: false
+        type: string
+        default: ${{ vars.KOSLI_CLI_VERSION }}
+      KOSLI_DEBUG:
+        required: false
+        type: string
+        default: ${{ vars.KOSLI_DEBUG }}
+      KOSLI_DRY_RUN:
+        required: false
+        type: string
+        default: ${{ vars.KOSLI_DRY_RUN }}
+      KOSLI_HOST:
+        required: false
+        type: string
+        default: ${{ vars.KOSLI_HOST }}
+      KOSLI_ORG:
+        required: false
+        type: string
+        default: ${{ vars.KOSLI_ORG }}
+      KOSLI_FLOW:
+        required: true
+        type: string
+      KOSLI_TRAIL:
+        required: true
+        type: string
+
     secrets:
       KOSLI_API_TOKEN:
         required: true
 
 env:
   KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
-  KOSLI_DEBUG:     ${{ vars.KOSLI_DEBUG }}          # true/false
-  KOSLI_DRY_RUN:   ${{ vars.KOSLI_DRY_RUN }}        # true/false
-  KOSLI_HOST:      ${{ vars.KOSLI_HOST }}           # https://app.kosli.com
-  KOSLI_ORG:       ${{ vars.KOSLI_ORG }}            # cyber-dojo
-  KOSLI_FLOW:      ${{ vars.KOSLI_FLOW }}           # aws-snyk-scan
-  KOSLI_ENV:       ${{ inputs.KOSLI_ENV }}          # aws-beta | aws-prod
+  KOSLI_DEBUG:     ${{ inputs.KOSLI_DEBUG }}          # true/false
+  KOSLI_DRY_RUN:   ${{ inputs.KOSLI_DRY_RUN }}        # true/false
+  KOSLI_HOST:      ${{ inputs.KOSLI_HOST }}           # https://app.kosli.com
+  KOSLI_ORG:       ${{ inputs.KOSLI_ORG }}            # cyber-dojo
+  KOSLI_FLOW:      ${{ inputs.KOSLI_FLOW }}           # saver-ci
+  KOSLI_TRAIL:     ${{ inputs.KOSLI_TRAIL }}
 
   AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
   AWS_REGION:     ${{ vars.AWS_REGION }}
@@ -30,8 +77,6 @@ jobs:
     permissions:
       id-token: write
       contents: write
-    env:
-      KOSLI_TRAIL: ${{ matrix.repo_name }}-${{ matrix.artifact_fingerprint }}
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -45,26 +90,33 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Setup Snyk
-        uses: snyk/actions/setup@master
-
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          repository: ${{ inputs.CHECKOUT_REPOSITORY }}
+          ref: ${{ inputs.CHECKOUT_REF }}
+          fetch-depth: ${{ inputs.CHECKOUT_FETCH_DEPTH }}
 
-      # ...
+      - name: Build and push Docker image to Amazon ECR
+        id: docker_build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          no-cache: true
+          push: true
+          tags: ${{ inputs.TAGS }}
+          build-args: ${{ inputs.BUILD_ARGS }}
 
       - name: Setup Kosli CLI
         if: ${{ success() || failure() }}
         uses: kosli-dev/setup-cli-action@v2
         with:
-          version: ${{ vars.KOSLI_CLI_VERSION }}
+          version: ${{ inputs.KOSLI_CLI_VERSION }}
 
       - name: Attest artifact to Kosli
         if: ${{ success() || failure() }}
         run:
-          kosli attest artifact "${{ matrix.artifact_name }}"
-            --fingerprint="${{ matrix.artifact_fingerprint }}"
-            --name="${{ matrix.repo_name }}"
+          kosli attest artifact "${{ inputs.TAGS }}"
+            --fingerprint="${{ steps.docker_build.outputs.digest }}"
+            --name="${{ inputs.NAME }}"
 
 
