@@ -14,13 +14,25 @@ on:
     branches:
       - main
 
+env:
+  ...
+
 jobs:
-  build-test-push:
-    uses: cyber-dojo/reusable-actions-workflows/.github/workflows/secure-build.yml@v0.0.5
-    secrets:
-      ...
+  some-job:
+    uses: cyber-dojo/reusable-actions-workflows/.github/workflows/secure-docker-build.yml@v0.0.5
     with:
-      ...
+      CHECKOUT_REPOSITORY: cyber-dojo/saver
+      CHECKOUT_REF: HEAD
+      CHECKOUT_DEPTH: 1
+      TAGS: ${{ env.IMAGE_NAME }}
+      BUILD_ARGS: |
+        COMMIT_SHA=${{ github.sha }}
+        BASE_IMAGE=${{ inputs.BASE_IMAGE }}
+      NAME: saver
+      KOSLI_FLOW: saver-ci
+      KOSLI_TRAIL: ${{ env.KOSLI_TRAIL }}
+    secrets:
+      KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
 ```
 
 The @v0.0.5 refers to tags in this repo:
