@@ -15,9 +15,6 @@ on:
         type: string
 
       # inputs for docker/build-push-action@v6
-      IMAGE_REFERENCE_NAME:  # eg saver
-        required: true
-        type: string
       IMAGE_TAGS:            # eg
         required: true
         type: string
@@ -52,6 +49,9 @@ on:
       KOSLI_TRAIL:
         required: true
         type: string
+      KOSLI_REFERENCE_NAME:  # eg saver
+        required: true
+        type: string
 
     secrets:
       KOSLI_API_TOKEN:
@@ -75,6 +75,8 @@ jobs:
   secure-build:
     needs: []
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.docker_build.outputs.digest }}
     permissions:
       id-token: write
       contents: write
@@ -118,6 +120,6 @@ jobs:
         run:
           kosli attest artifact "${{ inputs.IMAGE_TAGS }}"
             --fingerprint="${{ steps.docker_build.outputs.digest }}"
-            --name="${{ inputs.IMAGE_REFERENCE_NAME }}"
+            --name="${{ inputs.KOSLI_REFERENCE_NAME }}"
 
 
