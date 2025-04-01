@@ -124,6 +124,8 @@ jobs:
         run: |
           DIGEST=$(echo ${{ steps.docker_build.outputs.digest }} | sed 's/^sha256://')
           echo "DIGEST=${DIGEST}" >> ${GITHUB_ENV}
+          echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
+
 
       - name: Get build metadata
         run: |
