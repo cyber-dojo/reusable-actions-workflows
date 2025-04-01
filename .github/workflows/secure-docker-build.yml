@@ -130,16 +130,10 @@ jobs:
           echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
 
 
-      # - name: Get build metadata
-      #   run: |
-      #     docker buildx imagetools inspect ${{ inputs.IMAGE_TAGS }}@${{ steps.docker_build.outputs.digest }} \
-      #       --format "{{ json .Provenance.SLSA }}"
-
-      - name: Setup Kosli CLI
-        if: ${{ success() || failure() }}
-        uses: kosli-dev/setup-cli-action@v2
-        with:
-          version: ${{ inputs.KOSLI_CLI_VERSION }}
+      - name: Get build metadata
+        run: |
+          docker buildx imagetools inspect ${{ inputs.IMAGE_NAME }}@${{ steps.docker_build.outputs.digest }} \
+            --format "{{ json .Provenance.SLSA }}" > provenance.json
 
       - name: Attest Build Provenance
         id: artifact-gh-attest
@@ -148,6 +142,12 @@ jobs:
           subject-name: ${{ inputs.IMAGE_NAME }}
           subject-digest: sha256:${{ env.DIGEST }}
           push-to-registry: true
+      
+      - name: Setup Kosli CLI
+        if: ${{ success() || failure() }}
+        uses: kosli-dev/setup-cli-action@v2
+        with:
+          version: ${{ inputs.KOSLI_CLI_VERSION }}
 
       - name: Attest artifact to Kosli
         if: ${{ success() || failure() }}
@@ -165,10 +165,11 @@ jobs:
         if: ${{ success() || failure() }}
         run:
           kosli attest generic 
-            --name github-build-attestation
+            --name provenance-attestation
             --fingerprint ${{ env.DIGEST }}
+            --attachments provenance.json
             --external-url github-attestation=${{ steps.artifact-gh-attest.outputs.attestation-url }}
-            --external-url sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
+            --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
 
   # provenance:
   #   needs: [secure-build]
