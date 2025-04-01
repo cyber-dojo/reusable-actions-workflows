@@ -122,7 +122,7 @@ jobs:
         id: sanitize-digest
         run: |
           DIGEST=$(echo ${{ steps.docker_build.outputs.digest }} | sed 's/^sha256://')
-          echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
+          echo "DIGEST=${DIGEST}" >> ${GITHUB_ENV}
 
       - name: Get build metadata
         run: |
