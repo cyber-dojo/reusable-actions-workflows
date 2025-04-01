@@ -154,7 +154,7 @@ jobs:
             ${{ inputs.IMAGE_TAGS }}
             --certificate-identity "https://github.com/cyber-dojo/reusable-actions-workflows/.github/workflows/secure-docker-build.yml@refs/heads/main"
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
-            --output-json > provenance.json && cat provenance.json
+            --output json --output-file provenance.json && cat provenance.json
 
       - name: Attest artifact to Kosli
         if: ${{ success() || failure() }}
