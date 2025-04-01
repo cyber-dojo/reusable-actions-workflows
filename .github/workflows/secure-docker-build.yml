@@ -140,8 +140,9 @@ jobs:
         id: artifact-gh-attest
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ inputs.KOSLI_REFERENCE_NAME }}
+          subject-name: ${{ inputs.IMAGE_TAGS }}
           subject-digest: sha256:${{ env.DIGEST }}
+          push-to-registry: true
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
