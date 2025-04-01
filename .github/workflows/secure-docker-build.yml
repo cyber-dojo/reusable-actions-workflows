@@ -135,6 +135,11 @@ jobs:
           docker buildx imagetools inspect ${{ inputs.IMAGE_NAME }}@${{ steps.docker_build.outputs.digest }} \
             --format "{{ json .Provenance.SLSA }}" > provenance.json
 
+      - name: Get SBOM file
+        run: |
+          docker buildx imagetools inspect ${{ inputs.IMAGE_NAME }}@${{ steps.docker_build.outputs.digest }} \
+            --format "{{ json .SBOM.SPDX }}" > sbom.spdx.json
+
       - name: Attest Build Provenance
         id: artifact-gh-attest
         uses: actions/attest-build-provenance@v2
@@ -143,6 +148,19 @@ jobs:
           subject-digest: sha256:${{ env.DIGEST }}
           push-to-registry: true
       
+      - name: Attest SBOM to Github
+        id: sbom-gh-attest
+        uses: actions/attest-sbom@v2
+        with:
+          sbom-path: 'sbom.spdx.json'
+          subject-name: ${{ inputs.IMAGE_NAME }}
+          subject-digest: sha256:${{ env.DIGEST }}
+
+      - name: Make sbom GH sigstore attestation index available to next steps
+        run: |
+          TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.sbom-gh-attest.outputs.bundle-path }})
+          echo "SBOM_TLOG_INDEX=$TRANSPARENCY_LOG_INDEX" >> ${GITHUB_ENV}
+
       - name: Setup Kosli CLI
         if: ${{ success() || failure() }}
         uses: kosli-dev/setup-cli-action@v2
@@ -170,6 +188,17 @@ jobs:
             --attachments provenance.json
             --external-url github-attestation=${{ steps.artifact-gh-attest.outputs.attestation-url }}
             --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
+
+      - name: Attest SBOM
+        if: ${{ success() || failure() }}
+        run:
+          kosli attest generic 
+            --name sbom
+            --fingerprint ${{ env.DIGEST }}
+            --attachments sbom.spdx.json
+            --external-url github-attestation=${{ steps.sbom-gh-attest.outputs.attestation-url }}
+            --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.SBOM_TLOG_INDEX }}
+
 
   # provenance:
   #   needs: [secure-build]
