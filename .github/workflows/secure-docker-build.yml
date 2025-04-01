@@ -198,5 +198,6 @@ jobs:
     if: always()
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
-      image: ${{ inputs.IMAGE_TAGS }}
+      # image: ${{ inputs.IMAGE_TAGS }}
+      image: 244531986313.dkr.ecr.eu-central-1.amazonaws.com/saver
       digest: ${{ needs.secure-build.outputs.digest }}
