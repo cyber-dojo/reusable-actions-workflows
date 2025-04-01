@@ -19,7 +19,10 @@ on:
         type: string
 
       # inputs for docker/build-push-action@v6
-      IMAGE_TAGS:            # eg
+      IMAGE_NAME:            
+        required: true
+        type: string
+      IMAGE_TAG:            
         required: true
         type: string
       IMAGE_BUILD_ARGS:      # eg
@@ -114,7 +117,7 @@ jobs:
           context: .
           no-cache: true
           push: true
-          tags: ${{ inputs.IMAGE_TAGS }}
+          tags: ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
           build-args: ${{ inputs.IMAGE_BUILD_ARGS }}
           provenance: mode=max
           sbom: true
@@ -127,10 +130,10 @@ jobs:
           echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
 
 
-      - name: Get build metadata
-        run: |
-          docker buildx imagetools inspect ${{ inputs.IMAGE_TAGS }}@${{ steps.docker_build.outputs.digest }} \
-            --format "{{ json .Provenance.SLSA }}"
+      # - name: Get build metadata
+      #   run: |
+      #     docker buildx imagetools inspect ${{ inputs.IMAGE_TAGS }}@${{ steps.docker_build.outputs.digest }} \
+      #       --format "{{ json .Provenance.SLSA }}"
 
       - name: Setup Kosli CLI
         if: ${{ success() || failure() }}
@@ -142,15 +145,14 @@ jobs:
         id: artifact-gh-attest
         uses: actions/attest-build-provenance@v2
         with:
-          # subject-name: ${{ inputs.IMAGE_TAGS }}
-          subject-name: 244531986313.dkr.ecr.eu-central-1.amazonaws.com/saver
+          subject-name: ${{ inputs.IMAGE_NAME }}
           subject-digest: sha256:${{ env.DIGEST }}
           push-to-registry: true
 
       - name: Attest artifact to Kosli
         if: ${{ success() || failure() }}
         run:
-          kosli attest artifact ${{ inputs.IMAGE_TAGS }}
+          kosli attest artifact ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
             --fingerprint=${{ env.DIGEST }}
             --name=${{ inputs.KOSLI_REFERENCE_NAME }}
 
