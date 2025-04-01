@@ -199,16 +199,3 @@ jobs:
             --external-url github-attestation=${{ steps.sbom-gh-attest.outputs.attestation-url }}
             --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.SBOM_TLOG_INDEX }}
 
-
-  # provenance:
-  #   needs: [secure-build]
-  #   permissions:
-  #     actions: read # for detecting the Github Actions environment.
-  #     id-token: write # for creating OIDC tokens for signing.
-  #     packages: write # for uploading attestations.
-  #   if: always()
-  #   uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
-  #   with:
-  #     # image: ${{ inputs.IMAGE_TAGS }}
-  #     image: 244531986313.dkr.ecr.eu-central-1.amazonaws.com/saver
-  #     digest: ${{ needs.secure-build.outputs.digest }}
