@@ -140,7 +140,8 @@ jobs:
         id: artifact-gh-attest
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ inputs.IMAGE_TAGS }}
+          # subject-name: ${{ inputs.IMAGE_TAGS }}
+          subject-name: 244531986313.dkr.ecr.eu-central-1.amazonaws.com/saver
           subject-digest: sha256:${{ env.DIGEST }}
           push-to-registry: true
 
