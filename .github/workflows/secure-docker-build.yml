@@ -135,9 +135,31 @@ jobs:
         with:
           version: ${{ inputs.KOSLI_CLI_VERSION }}
 
+      - name: Attest Build Provenance
+        id: artifact-gh-attest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ inputs.KOSLI_REFERENCE_NAME }}
+          subject-digest: sha256:${{ env.DIGEST }}
+
       - name: Attest artifact to Kosli
         if: ${{ success() || failure() }}
         run: |
           kosli attest artifact "${{ inputs.IMAGE_TAGS }}" \
             --fingerprint="${{ steps.sanitize-digest.outputs.digest }}" \
             --name="${{ inputs.KOSLI_REFERENCE_NAME }}"
+
+      - name: Make artifact GH sigstore attestation index available to next steps
+        run: |
+          TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.artifact-gh-attest.outputs.bundle-path }})
+          echo "ARTIFACT_TLOG_INDEX=$TRANSPARENCY_LOG_INDEX" >> ${GITHUB_ENV}
+
+      - name: Attest GitHub attestation to Kosli
+        if: ${{ success() || failure() }}
+        run: |
+          kosli attest generic
+            --name github-build-attestation
+            --fingerprint ${{ env.DIGEST }}
+            --attachments ${{ steps.artifact-gh-attest.outputs.bundle-path	}}
+            --external-url github-attestation=${{ steps.artifact-gh-attest.outputs.attestation-url }}
+            --external-url sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
