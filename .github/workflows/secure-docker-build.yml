@@ -166,7 +166,6 @@ jobs:
         run:
           kosli attest generic --name github-build-attestation
             --fingerprint ${{ env.DIGEST }}
-            --attachments provenance.json
             --external-url github-attestation=${{ steps.artifact-gh-attest.outputs.attestation-url }}
             --external-url sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
 
