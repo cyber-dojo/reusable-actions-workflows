@@ -143,6 +143,19 @@ jobs:
           subject-name: ${{ inputs.KOSLI_REFERENCE_NAME }}
           subject-digest: sha256:${{ env.DIGEST }}
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Extract in-toto provenance attestation
+        id: in-toto
+        run:
+          cosign verify-attestation
+            --type slsaprovenance
+            ${{ inputs.IMAGE_TAGS }}
+            --certificate-identity "https://github.com/cyber-dojo/reusable-actions-workflows/.github/workflows/secure-docker-build.yml@refs/heads/main"
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+            --output-json > provenance.json && cat provenance.json
+
       - name: Attest artifact to Kosli
         if: ${{ success() || failure() }}
         run:
@@ -160,6 +173,6 @@ jobs:
         run:
           kosli attest generic --name github-build-attestation
             --fingerprint ${{ env.DIGEST }}
-            --attachments ${{ steps.artifact-gh-attest.outputs.bundle-path }}
+            --attachments provenance.json
             --external-url github-attestation=${{ steps.artifact-gh-attest.outputs.attestation-url }}
             --external-url sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
