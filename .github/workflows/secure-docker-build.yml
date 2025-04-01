@@ -147,7 +147,7 @@ jobs:
         if: ${{ success() || failure() }}
         run: |
           kosli attest artifact "${{ inputs.IMAGE_TAGS }}" \
-            --fingerprint="${{ steps.sanitize-digest.outputs.digest }}" \
+            --fingerprint="${{ env.DIGEST }}" \
             --name="${{ inputs.KOSLI_REFERENCE_NAME }}"
 
       - name: Make artifact GH sigstore attestation index available to next steps
