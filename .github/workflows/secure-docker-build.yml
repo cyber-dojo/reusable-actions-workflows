@@ -189,7 +189,7 @@ jobs:
           kosli attest generic 
             --name provenance-attestation
             --fingerprint ${{ env.DIGEST }}
-            --attachment provenance.json
+            --attachments provenance.json
             --external-url github-attestation=${{ steps.artifact-gh-attest.outputs.attestation-url }}
             --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
 
@@ -199,7 +199,7 @@ jobs:
           kosli attest generic 
             --name sbom
             --fingerprint ${{ env.DIGEST }}
-            --attachment sbom.spdx.json
+            --attachments sbom.spdx.json
             --external-url github-attestation=${{ steps.sbom-gh-attest.outputs.attestation-url }}
             --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.SBOM_TLOG_INDEX }}
 
