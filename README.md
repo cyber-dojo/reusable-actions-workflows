@@ -29,7 +29,7 @@ jobs:
       IMAGE_BUILD_ARGS: |
         COMMIT_SHA=${{ github.sha }}
         BASE_IMAGE=${{ inputs.BASE_IMAGE }}
-      KOSLI_FLOW: saver-ci
+      KOSLI_FLOW: ${{ env.KOSLI_FLOW }}
       KOSLI_TRAIL: ${{ env.KOSLI_TRAIL }}
       KOSLI_REFERENCE_NAME: saver
     secrets:
