@@ -148,6 +148,10 @@ jobs:
           subject-digest: sha256:${{ env.DIGEST }}
           push-to-registry: true
 
+      - name: Read the build provenance file
+        run:
+          cat ${{ steps.artifact-gh-attest.outputs.bundle-path }}
+
       - name: Make artifact GH sigstore attestation index available to next steps
         run: |
           TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.artifact-gh-attest.outputs.bundle-path }})
