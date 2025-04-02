@@ -25,7 +25,7 @@ on:
       IMAGE_TAG:            
         required: true
         type: string
-      IMAGE_BUILD_ARGS:      # eg
+      IMAGE_BUILD_ARGS:
         required: true
         type: string
 
@@ -133,15 +133,14 @@ jobs:
           echo "DIGEST=${DIGEST}" >> ${GITHUB_ENV}
           echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
 
-
       - name: Get build metadata
-        run: |
-          docker buildx imagetools inspect ${{ inputs.IMAGE_NAME }}@${{ steps.docker_build.outputs.digest }} \
+        run:
+          docker buildx imagetools inspect ${{ inputs.IMAGE_NAME }}@${{ steps.docker_build.outputs.digest }}
             --format "{{ json .Provenance.SLSA }}" > provenance.json
 
       - name: Get SBOM file
-        run: |
-          docker buildx imagetools inspect ${{ inputs.IMAGE_NAME }}@${{ steps.docker_build.outputs.digest }} \
+        run:
+          docker buildx imagetools inspect ${{ inputs.IMAGE_NAME }}@${{ steps.docker_build.outputs.digest }}
             --format "{{ json .SBOM.SPDX }}" > sbom.spdx.json
 
       - name: Attest Build Provenance
