@@ -10,9 +10,7 @@ Typical use is like this:
 name: Main
 
 on:
-  push:
-    branches:
-      - main
+  ...
 
 env:
   ...
@@ -29,6 +27,7 @@ jobs:
       IMAGE_BUILD_ARGS: |
         COMMIT_SHA=${{ github.sha }}
         BASE_IMAGE=${{ inputs.BASE_IMAGE }}
+      ATTEST_TO_KOSLI: ${{ github.ref == 'refs/heads/main' }}        
       KOSLI_FLOW: ${{ env.KOSLI_FLOW }}
       KOSLI_TRAIL: ${{ env.KOSLI_TRAIL }}
       KOSLI_REFERENCE_NAME: saver
