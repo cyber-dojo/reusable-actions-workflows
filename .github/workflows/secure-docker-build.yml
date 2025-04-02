@@ -147,6 +147,11 @@ jobs:
           subject-name: ${{ inputs.IMAGE_NAME }}
           subject-digest: sha256:${{ env.DIGEST }}
           push-to-registry: true
+
+      - name: Make artifact GH sigstore attestation index available to next steps
+        run: |
+          TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.artifact-gh-attest.outputs.bundle-path }})
+          echo "ARTIFACT_TLOG_INDEX=$TRANSPARENCY_LOG_INDEX" >> ${GITHUB_ENV}
       
       - name: Attest SBOM to Github
         id: sbom-gh-attest
@@ -174,18 +179,13 @@ jobs:
             --fingerprint=${{ env.DIGEST }}
             --name=${{ inputs.KOSLI_REFERENCE_NAME }}
 
-      - name: Make artifact GH sigstore attestation index available to next steps
-        run: |
-          TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.artifact-gh-attest.outputs.bundle-path }})
-          echo "ARTIFACT_TLOG_INDEX=$TRANSPARENCY_LOG_INDEX" >> ${GITHUB_ENV}
-
       - name: Attest GitHub attestation to Kosli
         if: ${{ success() || failure() }}
         run:
           kosli attest generic 
             --name provenance-attestation
             --fingerprint ${{ env.DIGEST }}
-            --attachments provenance.json
+            --user-data provenance.json
             --external-url github-attestation=${{ steps.artifact-gh-attest.outputs.attestation-url }}
             --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
 
@@ -195,7 +195,7 @@ jobs:
           kosli attest generic 
             --name sbom
             --fingerprint ${{ env.DIGEST }}
-            --attachments sbom.spdx.json
+            --user-data sbom.spdx.json
             --external-url github-attestation=${{ steps.sbom-gh-attest.outputs.attestation-url }}
             --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.SBOM_TLOG_INDEX }}
 
