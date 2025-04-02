@@ -22,7 +22,7 @@ jobs:
     uses: cyber-dojo/reusable-actions-workflows/.github/workflows/secure-docker-build.yml@main
     with:
       CHECKOUT_REPOSITORY: cyber-dojo/saver
-      CHECKOUT_REF: HEAD
+      CHECKOUT_REF: ${{ github.sha }}
       CHECKOUT_DEPTH: 1
       IMAGE_NAME: ${{ needs.setup.outputs.ecr_registry }}/${{ needs.setup.outputs.service_name }}
       IMAGE_TAG: ${{ needs.setup.outputs.image_tag }}
