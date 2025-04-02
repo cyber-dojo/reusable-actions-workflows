@@ -150,7 +150,7 @@ jobs:
 
       - name: Read the build provenance file
         run:
-          cat ${{ steps.artifact-gh-attest.outputs.bundle-path }}
+          cat ${{ steps.artifact-gh-attest.outputs.bundle-path }} | jq
 
       - name: Make artifact GH sigstore attestation index available to next steps
         run: |
