@@ -19,18 +19,19 @@ env:
 
 jobs:
   some-job:
-    uses: cyber-dojo/reusable-actions-workflows/.github/workflows/secure-docker-build.yml@v0.0.5
+    uses: cyber-dojo/reusable-actions-workflows/.github/workflows/secure-docker-build.yml@main
     with:
       CHECKOUT_REPOSITORY: cyber-dojo/saver
       CHECKOUT_REF: HEAD
       CHECKOUT_DEPTH: 1
-      IMAGE_REFERENCE_NAME: saver
-      IMAGE_TAGS: ${{ env.IMAGE_NAME }}
+      IMAGE_NAME: ${{ needs.setup.outputs.ecr_registry }}/${{ needs.setup.outputs.service_name }}
+      IMAGE_TAG: ${{ needs.setup.outputs.image_tag }}
       IMAGE_BUILD_ARGS: |
         COMMIT_SHA=${{ github.sha }}
         BASE_IMAGE=${{ inputs.BASE_IMAGE }}
       KOSLI_FLOW: saver-ci
       KOSLI_TRAIL: ${{ env.KOSLI_TRAIL }}
+      KOSLI_REFERENCE_NAME: saver
     secrets:
       KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
 ```
