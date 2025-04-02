@@ -167,6 +167,8 @@ jobs:
           echo "SBOM_TLOG_INDEX=$TRANSPARENCY_LOG_INDEX" >> ${GITHUB_ENV}
 
       - name: examine gh attestation bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh attestation download oci://${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }} --repo ${{ inputs.CHECKOUT_REPOSITORY }}
           cat "sha256:${DIGEST}.jsonl" | jq -s '.'
