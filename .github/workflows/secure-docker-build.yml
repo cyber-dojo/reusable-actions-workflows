@@ -169,6 +169,12 @@ jobs:
           TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.sbom-gh-attest.outputs.bundle-path }})
           echo "SBOM_TLOG_INDEX=$TRANSPARENCY_LOG_INDEX" >> ${GITHUB_ENV}
 
+      - name: Find details about workflow
+        run: |
+          echo "Workflow     => ${{ github.workflow }}"
+          echo "Workflow ref => ${{ github.workflow_ref }}"
+          echo "Workflow sha => ${{ github.workflow_sha }}"
+
       - name: Setup Kosli CLI
         if: ${{ success() || failure() }}
         uses: kosli-dev/setup-cli-action@v2
