@@ -1,0 +1,98 @@
+name: Secure docker build
+
+on:
+  workflow_call:
+    outputs:
+      digest:
+        description: The SHA256 image digest
+        value: ${{ jobs.secure-build.outputs.digest }}
+      cache_path:
+        description: Docker image cache path
+        value: ${{ jobs.secure-build.outputs.cache_path }}
+      cache_key:
+        description: Docker image cache key
+        value: ${{ jobs.secure-build.outputs.cache_key }}
+
+    inputs:
+      # inputs for actions/checkout@v4
+      CHECKOUT_REPOSITORY:
+        required: true
+        type: string
+      CHECKOUT_REF:
+        required: true
+        type: string
+      CHECKOUT_FETCH_DEPTH:
+        required: true
+        type: string
+
+      # inputs for docker/build-push-action@v6
+      IMAGE_NAME:            
+        required: true
+        type: string
+      IMAGE_TAG:            
+        required: true
+        type: string
+      IMAGE_BUILD_ARGS:
+        required: false
+        type: string
+
+
+env:
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+  AWS_REGION:     ${{ vars.AWS_REGION }}
+
+jobs:
+
+  secure-build:
+    needs: []
+    runs-on: ubuntu-latest
+    outputs:
+      digest:     ${{ steps.sanitize-digest.outputs.digest }}
+      cache_path: ${{ steps.set-cache.outputs.cache_path }}
+      cache_key:  ${{ steps.set-cache.outputs.cache_key }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.CHECKOUT_REPOSITORY }}
+          ref: ${{ inputs.CHECKOUT_REF }}
+          fetch-depth: ${{ inputs.CHECKOUT_FETCH_DEPTH }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        id: docker_build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          no-cache: true
+          push: false
+          load: true
+          tags: ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
+          build-args: ${{ inputs.IMAGE_BUILD_ARGS }}
+
+      - name: Sanitize digest
+        id: sanitize-digest
+        run: |
+          DIGEST="036cf0dd69fd6f453a328ab8a6fd6983dd148fdbc1e99f46d85f129944aceb69"
+          echo "DIGEST=${DIGEST}" >> ${GITHUB_ENV}
+          echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
+
+      - name: Set Docker image tar filename
+        id: set-cache
+        run: |
+          CACHE_PATH=${{ env.DIGEST }}.tar
+          echo "CACHE_PATH=${CACHE_PATH}" >> ${GITHUB_ENV}
+          echo "cache_path=${CACHE_PATH}" >> ${GITHUB_OUTPUT}
+          echo "CACHE_KEY=${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}" >> ${GITHUB_ENV} 
+          echo "cache_key=${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}" >> ${GITHUB_OUTPUT} 
+
+      - name: Save Docker image
+        run:
+          docker image save ${{ env.CACHE_KEY }} --output ${{ env.CACHE_PATH }}
+
+      - name: Cache Docker image
+        uses: actions/cache@v4
+        with:
+          key:  ${{ env.CACHE_KEY }}
+          path: ${{ env.CACHE_PATH }}
