@@ -132,6 +132,7 @@ jobs:
           context: .
           no-cache: true
           push: true
+          load: true
           tags: ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
           build-args: ${{ inputs.IMAGE_BUILD_ARGS }}
           provenance: mode=max
