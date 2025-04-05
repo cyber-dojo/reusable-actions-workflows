@@ -149,8 +149,9 @@ jobs:
           echo "cache_key=${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}" >> ${GITHUB_OUTPUT} 
 
       - name: Pull docker image
-        run:
-          docker pull ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}@sha256:${{ env.DIGEST }}
+        run: |
+          docker pull ${{ inputs.IMAGE_NAME }}@sha256:${{ env.DIGEST }}
+          docker tag ${{ inputs.IMAGE_NAME }}@sha256:${{ env.DIGEST }} ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
 
       - name: Save Docker image
         run:
