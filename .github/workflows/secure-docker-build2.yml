@@ -1,3 +1,6 @@
+# Used to test cached image retrieval from ci-testing repo.
+# Will be deleted soon
+
 name: Secure docker build
 
 on:
@@ -78,7 +81,7 @@ jobs:
           echo "DIGEST=${DIGEST}" >> ${GITHUB_ENV}
           echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
 
-      - name: Set Docker image tar filename
+      - name: Set Docker image cache outputs
         id: set-cache
         run: |
           CACHE_PATH=${{ env.DIGEST }}.tar

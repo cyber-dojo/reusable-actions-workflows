@@ -1,3 +1,5 @@
+# Intended to replace secure-image-load.yml so calling workflow does not need to pull image from ECR
+
 name: Secure docker build
 
 on:
@@ -6,9 +8,12 @@ on:
       digest:
         description: The SHA256 image digest
         value: ${{ jobs.secure-build.outputs.digest }}
-      image_tar_filename:
-        description: Tar filename to load from cache
-        value: ${{ jobs.secure-build.outputs.tar_filename }}
+      cache_path:
+        description: Docker image cache path
+        value: ${{ jobs.secure-build.outputs.cache_path }}
+      cache_key:
+        description: Docker image cache key
+        value: ${{ jobs.secure-build.outputs.cache_key }}
 
     inputs:
       # inputs for actions/checkout@v4
@@ -30,7 +35,7 @@ on:
         required: true
         type: string
       IMAGE_BUILD_ARGS:
-        required: true
+        required: false
         type: string
 
       # inputs for [kosli attest artifact]
@@ -91,7 +96,9 @@ jobs:
     needs: []
     runs-on: ubuntu-latest
     outputs:
-      digest: ${{ steps.sanitize-digest.outputs.digest }}
+      digest:     ${{ steps.set.outputs.digest }}
+      cache_path: ${{ steps.set.outputs.cache_path }}
+      cache_key:  ${{ steps.set.outputs.cache_key }}
     permissions:
       id-token: write
       contents: write
@@ -130,30 +137,26 @@ jobs:
           provenance: mode=max
           sbom: true
 
-      - name: Sanitize digest
-        id: sanitize-digest
+      - name: Set outputs
+        id: set
         run: |
           DIGEST=$(echo ${{ steps.docker_build.outputs.digest }} | sed 's/^sha256://')
           echo "DIGEST=${DIGEST}" >> ${GITHUB_ENV}
           echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
-
-      - name: Set Docker image tar filename
-        id: set-tar-filename
-        run: |
-          TAR_FILENAME=${{ env.DIGEST }}.tar
-          echo "TAR_FILENAME=${TAR_FILENAME}" >> ${GITHUB_ENV}
-          echo "tar_filename=${TAR_FILENAME}" >> ${GITHUB_OUTPUT}
+          echo "CACHE_PATH=${DIGEST}.tar" >> ${GITHUB_ENV}
+          echo "cache_path=${DIGEST}.tar" >> ${GITHUB_OUTPUT}
+          echo "CACHE_KEY=${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}" >> ${GITHUB_ENV} 
+          echo "cache_key=${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}" >> ${GITHUB_OUTPUT} 
 
       - name: Save Docker image
         run:
-          docker image save ${{ inputs.IMAGE_NAME }}@${{ env.DIGEST }}
-            --output ${{ env.TAR_FILENAME }}
+          docker image save ${{ env.CACHE_KEY }} --output ${{ env.CACHE_PATH }}
 
       - name: Cache Docker image
         uses: actions/cache@v4
         with:
-          key:  ${{ inputs.IMAGE_NAME }}@${{ env.DIGEST }}
-          path: ${{ env.TAR_FILENAME }}
+          key:  ${{ env.CACHE_KEY }}
+          path: ${{ env.CACHE_PATH }}
 
       - name: Get build metadata
         run:
@@ -191,7 +194,7 @@ jobs:
           TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.sbom-gh-attest.outputs.bundle-path }})
           echo "SBOM_TLOG_INDEX=${TRANSPARENCY_LOG_INDEX}" >> ${GITHUB_ENV}
 
-      - name: Find details about workflow
+      - name: Echo workflow details
         run: |
           echo "Workflow     => ${{ github.workflow }}"
           echo "Workflow ref => ${{ github.workflow_ref }}"
