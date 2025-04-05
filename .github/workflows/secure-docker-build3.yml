@@ -132,7 +132,6 @@ jobs:
           context: .
           no-cache: true
           push: true
-          load: true
           tags: ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
           build-args: ${{ inputs.IMAGE_BUILD_ARGS }}
           provenance: mode=max
@@ -148,6 +147,10 @@ jobs:
           echo "cache_path=${DIGEST}.tar" >> ${GITHUB_OUTPUT}
           echo "CACHE_KEY=${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}" >> ${GITHUB_ENV} 
           echo "cache_key=${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}" >> ${GITHUB_OUTPUT} 
+
+      - name: Pull docker image
+        run:
+          docker pull ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}@sha256:${{ env.DIGEST }}
 
       - name: Save Docker image
         run:
