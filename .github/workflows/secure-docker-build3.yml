@@ -148,21 +148,6 @@ jobs:
           echo "CACHE_KEY=${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}" >> ${GITHUB_ENV} 
           echo "cache_key=${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}" >> ${GITHUB_OUTPUT} 
 
-      - name: Pull docker image
-        run: |
-          docker pull ${{ inputs.IMAGE_NAME }}@sha256:${{ env.DIGEST }}
-          docker tag ${{ inputs.IMAGE_NAME }}@sha256:${{ env.DIGEST }} ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
-
-      - name: Save Docker image
-        run:
-          docker image save ${{ env.CACHE_KEY }} --output ${{ env.CACHE_PATH }}
-
-      - name: Cache Docker image
-        uses: actions/cache@v4
-        with:
-          key:  ${{ env.CACHE_KEY }}
-          path: ${{ env.CACHE_PATH }}
-
       - name: Get build metadata
         run:
           docker buildx imagetools inspect ${{ inputs.IMAGE_NAME }}@${{ env.DIGEST }}
@@ -238,3 +223,17 @@ jobs:
             --external-url github-attestation=${{ steps.sbom-gh-attest.outputs.attestation-url }}
             --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.SBOM_TLOG_INDEX }}
 
+      - name: Pull docker image
+        run: |
+          docker pull ${{ inputs.IMAGE_NAME }}@sha256:${{ env.DIGEST }}
+          docker tag ${{ inputs.IMAGE_NAME }}@sha256:${{ env.DIGEST }} ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
+
+      - name: Save Docker image
+        run:
+          docker image save ${{ env.CACHE_KEY }} --output ${{ env.CACHE_PATH }}
+
+      - name: Cache Docker image
+        uses: actions/cache@v4
+        with:
+          key:  ${{ env.CACHE_KEY }}
+          path: ${{ env.CACHE_PATH }}
