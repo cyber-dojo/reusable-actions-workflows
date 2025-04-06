@@ -1,4 +1,6 @@
-# Intended to replace secure-image-load.yml so calling workflow does not need to pull image from ECR
+# WIP: Intended to replace secure-docker-build.yml so calling workflow can either:
+#  - get image from cache
+#  - pull image from ECR
 
 name: Secure docker build
 
@@ -223,6 +225,7 @@ jobs:
             --external-url github-attestation=${{ steps.sbom-gh-attest.outputs.attestation-url }}
             --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.SBOM_TLOG_INDEX }}
 
+      # WIP: put docker image into cache...
       - name: Pull docker image
         run: |
           docker pull ${{ inputs.IMAGE_NAME }}@sha256:${{ env.DIGEST }}
