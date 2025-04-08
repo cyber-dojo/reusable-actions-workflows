@@ -64,12 +64,9 @@ on:
         required: true
         type: string
 
-#    secrets:
-#      KOSLI_API_TOKEN:
-#        required: true
-
 
 env:
+  KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
   KOSLI_DEBUG:     ${{ inputs.KOSLI_DEBUG }}          # true/false
   KOSLI_DRY_RUN:   ${{ inputs.KOSLI_DRY_RUN }}        # true/false
   KOSLI_HOST:      ${{ inputs.KOSLI_HOST }}           # https://app.kosli.com
@@ -181,8 +178,6 @@ jobs:
           version: ${{ inputs.KOSLI_CLI_VERSION }}
 
       - name: Attest artifact to Kosli
-        env:
-          KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
         if: ${{ inputs.ATTEST_TO_KOSLI == true && (success() || failure()) }}
         run:
           kosli attest artifact ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
@@ -190,8 +185,6 @@ jobs:
             --name=${{ inputs.KOSLI_REFERENCE_NAME }}
 
       - name: Attest GitHub attestation to Kosli
-        env:
-          KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
         if: ${{ inputs.ATTEST_TO_KOSLI == true && (success() || failure()) }}
         run:
           kosli attest generic 
@@ -202,8 +195,6 @@ jobs:
             --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
 
       - name: Attest SBOM
-        env:
-          KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
         if: ${{ inputs.ATTEST_TO_KOSLI == true && (success() || failure()) }}
         run:
           kosli attest generic 
