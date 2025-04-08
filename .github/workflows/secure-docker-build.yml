@@ -6,9 +6,6 @@ on:
       digest:
         description: The SHA256 image digest
         value: ${{ jobs.secure-build.outputs.digest }}
-#      image_tar_filename:
-#        description: Tar filename to load from cache
-#        value: ${{ jobs.secure-build.outputs.tar_filename }}
 
     inputs:
       # inputs for actions/checkout@v4
@@ -33,7 +30,6 @@ on:
         required: false
         type: string
 
-      # inputs for [kosli attest artifact]
       ATTEST_TO_KOSLI:
         required: false
         type: boolean
@@ -68,9 +64,9 @@ on:
         required: true
         type: string
 
-    secrets:
-      KOSLI_API_TOKEN:
-        required: true
+#    secrets:
+#      KOSLI_API_TOKEN:
+#        required: true
 
 
 env:
@@ -91,8 +87,7 @@ jobs:
     needs: []
     runs-on: ubuntu-latest
     outputs:
-      digest:       ${{ steps.sanitize-digest.outputs.digest }}
-#      tar_filename: ${{ steps.sanitize-digest.outputs.tar_filename }}
+      digest: ${{ steps.sanitize-digest.outputs.digest }}
     permissions:
       id-token: write
       contents: write
