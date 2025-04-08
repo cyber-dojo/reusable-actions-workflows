@@ -64,6 +64,10 @@ on:
         required: true
         type: string
 
+    secrets:
+      KOSLI_API_TOKEN:
+        required: true
+
 
 env:
   KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
