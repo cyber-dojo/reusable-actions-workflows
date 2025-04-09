@@ -128,10 +128,11 @@ jobs:
         with:
           context: .
           no-cache: true
-          push: false
-          load: true
+          push: true
           tags: ${{ inputs.image_name }}:${{ inputs.image_tag }}
           build-args: ${{ inputs.image_build_args }}
+          provenance: mode=max
+          sbom: true
 
       - name: Sanitize digest
         id: sanitize-digest
