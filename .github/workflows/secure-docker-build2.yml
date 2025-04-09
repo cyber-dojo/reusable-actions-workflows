@@ -222,12 +222,12 @@ jobs:
           CACHE_PATH=${{ env.DIGEST }}.tar
           echo "CACHE_PATH=${CACHE_PATH}" >> ${GITHUB_ENV}
           echo "cache_path=${CACHE_PATH}" >> ${GITHUB_OUTPUT}
-          echo "CACHE_KEY=${{ inputs.image_name }}:${{ inputs.image_tag }}" >> ${GITHUB_ENV} 
-          echo "cache_key=${{ inputs.image_name }}:${{ inputs.image_tag }}" >> ${GITHUB_OUTPUT} 
+          echo "CACHE_KEY=${{ inputs.image_name }}:${{ inputs.image_tag }}@sha256:${{ env.DIGEST }}" >> ${GITHUB_ENV} 
+          echo "cache_key=${{ inputs.image_name }}:${{ inputs.image_tag }}@sha256:${{ env.DIGEST }}" >> ${GITHUB_OUTPUT} 
 
       - name: Pull image
         run:
-          docker pull ${{ inputs.image_name }}:${{ inputs.image_tag }}@sha256:${{ env.DIGEST }}
+          docker pull ${{ cache.KEY }}
 
       - name: Save image
         run:
