@@ -30,6 +30,16 @@ on:
         required: false
         type: string
 
+      KOSLI_FLOW:
+        required: true
+        type: string
+      KOSLI_TRAIL:
+        required: true
+        type: string
+      KOSLI_REFERENCE_NAME:  # eg saver
+        required: true
+        type: string
+
       ATTEST_TO_KOSLI:
         required: false
         type: boolean
@@ -54,15 +64,6 @@ on:
         required: false
         type: string
         default: ${{ vars.KOSLI_ORG }}
-      KOSLI_FLOW:
-        required: true
-        type: string
-      KOSLI_TRAIL:
-        required: true
-        type: string
-      KOSLI_REFERENCE_NAME:  # eg saver
-        required: true
-        type: string
 
     secrets:
       KOSLI_API_TOKEN:
