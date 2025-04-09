@@ -227,7 +227,7 @@ jobs:
 
       - name: Pull image
         run:
-          docker pull ${{ cache.KEY }}
+          docker pull ${{ env.CACHE_KEY }}
 
       - name: Save image
         run:
