@@ -119,10 +119,10 @@ jobs:
           ref: ${{ inputs.checkout_ref }}
           fetch-depth: ${{ inputs.checkout_fetch_depth }}
 
-      - name: Set up Docker Buildx
+      - name: Set up docker-buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image
+      - name: Build image
         id: docker_build
         uses: docker/build-push-action@v6
         with:
@@ -151,7 +151,7 @@ jobs:
           docker buildx imagetools inspect ${{ inputs.image_name }}@${{ steps.docker_build.outputs.digest }}
             --format "{{ json .SBOM.SPDX }}" > sbom.spdx.json
 
-      - name: Attest Build Provenance
+      - name: Attest build provenance
         id: artifact-gh-attest
         uses: actions/attest-build-provenance@v2
         with:
@@ -216,7 +216,7 @@ jobs:
             --external-url github-attestation=${{ steps.sbom-gh-attest.outputs.attestation-url }}
             --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.SBOM_TLOG_INDEX }}
 
-      - name: Set Docker image cache outputs
+      - name: Set image cache outputs
         id: set-cache
         run: |
           CACHE_PATH=${{ env.DIGEST }}.tar
@@ -225,11 +225,15 @@ jobs:
           echo "CACHE_KEY=${{ inputs.image_name }}:${{ inputs.image_tag }}" >> ${GITHUB_ENV} 
           echo "cache_key=${{ inputs.image_name }}:${{ inputs.image_tag }}" >> ${GITHUB_OUTPUT} 
 
-      - name: Save Docker image
+      - name: Pull image
+        run:
+          docker pull ${{ inputs.image_name }}:${{ inputs.image_tag }}@sha256:${{ env.DIGEST }}
+
+      - name: Save image
         run:
           docker image save ${{ env.CACHE_KEY }} --output ${{ env.CACHE_PATH }}
 
-      - name: Cache Docker image
+      - name: Cache image
         uses: actions/cache@v4
         with:
           key:  ${{ env.CACHE_KEY }}
