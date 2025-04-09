@@ -112,6 +112,10 @@ jobs:
           ref: ${{ inputs.CHECKOUT_REF }}
           fetch-depth: ${{ inputs.CHECKOUT_FETCH_DEPTH }}
 
+      - name: Get branch information
+        run: 
+          git fetch origin main:main || true
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
