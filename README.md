@@ -12,7 +12,9 @@ name: Main
 ...
 
 jobs:
-  ...  
+  setup:
+    ...
+  
   build-image:
     needs: [setup]    
     uses: cyber-dojo/reusable-actions-workflows/.github/workflows/secure-docker-build.yml@main
