@@ -176,8 +176,6 @@ jobs:
           echo "Workflow ref => ${{ github.workflow_ref }}"
           echo "Workflow sha => ${{ github.workflow_sha }}"
           git status
-          git fetch origin main:main || true
-          git status
 
       - name: Setup Kosli CLI
         if: ${{ success() || failure() }}
