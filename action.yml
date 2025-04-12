@@ -2,6 +2,11 @@
 name: Secure docker build
 
 inputs:
+  VARS:
+    required: true
+  ENV:
+    required: true
+
   # inputs for actions/checkout@v4
   CHECKOUT_REPOSITORY:
     required: true
@@ -24,6 +29,7 @@ inputs:
     required: false
     type: string
 
+  # inputs for Kosli: required
   KOSLI_FLOW:
     required: true
     type: string
@@ -34,30 +40,35 @@ inputs:
     required: true
     type: string
 
+  # inputs for Kosli: defaulted
   ATTEST_TO_KOSLI:
     required: false
     type: boolean
-    default: true
+    default: false
   KOSLI_CLI_VERSION:
     required: false
     type: string
-    default: ${{ vars.KOSLI_CLI_VERSION }}
+    default: ${{ fromjson(inputs.VARS).KOSLI_CLI_VERSION }}
   KOSLI_DEBUG:
     required: false
     type: string
-    default: ${{ vars.KOSLI_DEBUG }}
+    default: ${{ fromjson(inputs.VARS).KOSLI_DEBUG }}
   KOSLI_DRY_RUN:
     required: false
     type: string
-    default: ${{ vars.KOSLI_DRY_RUN }}
+    default: ${{ fromjson(inputs.VARS).KOSLI_DRY_RUN }}
   KOSLI_HOST:
     required: false
     type: string
-    default: ${{ vars.KOSLI_HOST }}
+    default: ${{ fromjson(inputs.VARS).KOSLI_HOST }}
   KOSLI_ORG:
     required: false
     type: string
-    default: ${{ vars.KOSLI_ORG }}
+    default: ${{ fromjson(inputs.VARS).KOSLI_ORG }}
+  KOSLI_API_TOKEN:
+    required: false
+    type: string
+    default: ${{ fromjson(inputs.ENV).KOSLI_API_TOKEN }}
 
 outputs:
   digest:
