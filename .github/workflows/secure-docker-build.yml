@@ -111,6 +111,7 @@ jobs:
           repository: ${{ inputs.CHECKOUT_REPOSITORY }}
           ref: ${{ inputs.CHECKOUT_REF }}
           fetch-depth: ${{ inputs.CHECKOUT_FETCH_DEPTH }}
+          fetch-tags: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -126,6 +127,10 @@ jobs:
           build-args: ${{ inputs.IMAGE_BUILD_ARGS }}
           provenance: mode=max
           sbom: true
+
+      - name: Find details about checkout
+        run:
+          git status
 
       - name: Sanitize digest
         id: sanitize-digest
@@ -175,7 +180,6 @@ jobs:
           echo "Workflow     => ${{ github.workflow }}"
           echo "Workflow ref => ${{ github.workflow_ref }}"
           echo "Workflow sha => ${{ github.workflow_sha }}"
-          git status
 
       - name: Setup Kosli CLI
         if: ${{ success() || failure() }}
