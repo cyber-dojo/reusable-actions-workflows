@@ -126,8 +126,8 @@ jobs:
           context: .
           no-cache: true
           push: true
-          load: true
-          #outputs: type=oci,dest=${{ runner.temp }}/image.tar
+          #load: true
+          outputs: type=image,dest=${{ runner.temp }}/image.tar
           tags: ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
           build-args: ${{ inputs.IMAGE_BUILD_ARGS }}
           provenance: mode=max
