@@ -126,7 +126,8 @@ jobs:
           context: .
           no-cache: true
           push: true
-          outputs: type=oci,dest=${{ runner.temp }}/image.tar
+          load: true
+          #outputs: type=oci,dest=${{ runner.temp }}/image.tar
           tags: ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
           build-args: ${{ inputs.IMAGE_BUILD_ARGS }}
           provenance: mode=max
@@ -140,7 +141,8 @@ jobs:
           echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
 
       - name: Rename docker tar file
-        run:
+        run: |
+          docker image ls
           mv ${{ runner.temp }}/image.tar ${{ runner.temp }}/${{ env.DIGEST }}.tar
 
       - name: Upload artifact
