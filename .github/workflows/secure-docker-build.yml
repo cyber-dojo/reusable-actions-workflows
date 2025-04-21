@@ -150,17 +150,6 @@ jobs:
           name: ${{ env.DIGEST }}
           path: ${{ runner.temp }}/${{ env.DIGEST }}.tar
 
-#      - name: Rename docker tar file
-#        run: |
-#          docker image ls
-#          mv ${{ runner.temp }}/image.tar ${{ runner.temp }}/${{ env.DIGEST }}.tar
-
-#      - name: Cache server Docker image
-#        uses: actions/cache@v4
-#        with:
-#          path: /tmp/kosli:${{ github.sha }}.tar
-#          key: ${{ env.TAGGED_IMAGE }}
-
       - name: Get build metadata
         run:
           docker buildx imagetools inspect ${{ inputs.IMAGE_NAME }}@${{ steps.docker_build.outputs.digest }}
