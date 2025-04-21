@@ -1,27 +1,23 @@
 name: Download artifact
+description: 'Download docker image created in secure-docker-build'
 
-on:
-  workflow_call:
-    inputs:
-      IMAGE_NAME:
-        required: true
-        type: string
-      IMAGE_DIGEST:
-        required: true
-        type: string
+inputs:
+  IMAGE_NAME:
+    required: true
+    type: string
+  IMAGE_DIGEST:
+    required: true
+    type: string
 
-jobs:
+runs:
+  using: "composite"
+  steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ env.IMAGE_DIGEST }}
+        path: ${{ runner.temp }}
 
-  download-artifact:
-    needs: []
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.IMAGE_DIGEST }}
-          path: ${{ runner.temp }}
-
-      - name: Load image
-        run:
-          cat ${{ runner.temp }}/${{ env.IMAGE_DIGEST }}.tar | docker import - ${{ env.IMAGE_NAME }}
+    - name: Load image
+      run:
+        cat ${{ runner.temp }}/${{ env.IMAGE_DIGEST }}.tar | docker import - ${{ env.IMAGE_NAME }}
