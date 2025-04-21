@@ -126,6 +126,7 @@ jobs:
           context: .
           no-cache: true
           push: true
+          outputs: type=docker,dest=${{ runner.temp }}/image.tar
           tags: ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
           build-args: ${{ inputs.IMAGE_BUILD_ARGS }}
           provenance: mode=max
@@ -137,6 +138,16 @@ jobs:
           DIGEST=$(echo ${{ steps.docker_build.outputs.digest }} | sed 's/^sha256://')
           echo "DIGEST=${DIGEST}" >> ${GITHUB_ENV}
           echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
+
+      - name: Rename docker tar file
+        run:
+          mv ${{ runner.temp }}/image.tar ${{ runner.temp }}/${{ env.DIGEST }}.tar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.DIGEST }}
+          path: ${{ runner.temp }}/${{ env.DIGEST }}.tar
 
       - name: Get build metadata
         run:
@@ -159,7 +170,7 @@ jobs:
       - name: Make artifact GH sigstore attestation index available to next steps
         run: |
           TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.artifact-gh-attest.outputs.bundle-path }})
-          echo "ARTIFACT_TLOG_INDEX=$TRANSPARENCY_LOG_INDEX" >> ${GITHUB_ENV}
+          echo "ARTIFACT_TLOG_INDEX=${TRANSPARENCY_LOG_INDEX}" >> ${GITHUB_ENV}
       
       - name: Attest SBOM to Github
         id: sbom-gh-attest
@@ -172,7 +183,7 @@ jobs:
       - name: Make sbom GH sigstore attestation index available to next steps
         run: |
           TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.sbom-gh-attest.outputs.bundle-path }})
-          echo "SBOM_TLOG_INDEX=$TRANSPARENCY_LOG_INDEX" >> ${GITHUB_ENV}
+          echo "SBOM_TLOG_INDEX=${TRANSPARENCY_LOG_INDEX}" >> ${GITHUB_ENV}
 
       - name: Find details about workflow
         run: |
