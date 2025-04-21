@@ -1,7 +1,7 @@
 # reusable-actions-workflows
 
-Used by cyber-dojo Org repos in their Github Actions workflows.
-- secure-docker-build.yml
+- The secure-docker-build.yml workflow is used by cyber-dojo Org repos in their Github Actions workflows.
+- There is a partner composite workflow called [download-artifact](https://github.com/cyber-dojo/download-artifact) for downloading the docker-image created.
 
 
 Typical use is like this:
