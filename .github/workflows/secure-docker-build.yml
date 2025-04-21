@@ -126,8 +126,6 @@ jobs:
           context: .
           no-cache: true
           push: true
-          #load: true
-          outputs: type=image,dest=${{ runner.temp }}/image.tar
           tags: ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
           build-args: ${{ inputs.IMAGE_BUILD_ARGS }}
           provenance: mode=max
@@ -140,16 +138,28 @@ jobs:
           echo "DIGEST=${DIGEST}" >> ${GITHUB_ENV}
           echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
 
-      - name: Rename docker tar file
-        run: |
-          docker image ls
-          mv ${{ runner.temp }}/image.tar ${{ runner.temp }}/${{ env.DIGEST }}.tar
+      - name: Save server Docker image to cache for the following jobs
+        run: |          
+          docker pull ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
+          # docker tag ${{ env.TAGGED_IMAGE }} merkely:latest
+          docker image save ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }} --output ${{ runner.temp }}/${{ env.DIGEST }}.tar
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.DIGEST }}
           path: ${{ runner.temp }}/${{ env.DIGEST }}.tar
+
+#      - name: Rename docker tar file
+#        run: |
+#          docker image ls
+#          mv ${{ runner.temp }}/image.tar ${{ runner.temp }}/${{ env.DIGEST }}.tar
+
+#      - name: Cache server Docker image
+#        uses: actions/cache@v4
+#        with:
+#          path: /tmp/kosli:${{ github.sha }}.tar
+#          key: ${{ env.TAGGED_IMAGE }}
 
       - name: Get build metadata
         run:
