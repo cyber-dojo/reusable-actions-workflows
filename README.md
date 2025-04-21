@@ -1,7 +1,7 @@
 # reusable-actions-workflows
 
 Used by cyber-dojo Org repos in their Github Actions workflows.
-- secure-build.yml
+- secure-docker-build.yml
 
 
 Typical use is like this:
@@ -38,33 +38,15 @@ jobs:
   after-build-image:
     runs-on: ubuntu-latest
     needs: [setup, build-image]
-    permissions:
-      id-token: write
-      contents: read
     env:
       IMAGE_NAME:        ${{ needs.setup.outputs.ecr_registry }}/${{ needs.setup.outputs.service_name }}
       KOSLI_FINGERPRINT: ${{ needs.build-image.outputs.digest }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Download docker image
+        uses: cyber-dojo/download-artifact@main
         with:
-          fetch-depth: 1
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region:            ${{ needs.setup.outputs.aws_region }}
-          role-duration-seconds: 900
-          role-session-name:     ${{ github.event.repository.name }}
-          role-to-assume:        arn:aws:iam::${{ needs.setup.outputs.aws_account_id_beta }}:role/${{ needs.setup.outputs.gh_actions_iam_role_name }}
-          mask-aws-account-id:   no
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Pull image from ECR registry
-        run:
-          docker image pull "${IMAGE_NAME}@sha256:${KOSLI_FINGERPRINT}"
+          IMAGE_NAME:   ${{ needs.setup.outputs.image_name }}
+          IMAGE_DIGEST: ${{ needs.build-image.outputs.digest }}
       ...
 ```
 
