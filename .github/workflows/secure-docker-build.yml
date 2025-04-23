@@ -113,10 +113,6 @@ jobs:
           ref: ${{ inputs.checkout_ref }}
           fetch-depth: ${{ inputs.checkout_fetch_depth }}
 
-      - name: Print git status
-        run:
-          git status
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
