@@ -19,34 +19,30 @@ jobs:
     needs: [setup]    
     uses: cyber-dojo/reusable-actions-workflows/.github/workflows/secure-docker-build.yml@main
     with:
-      CHECKOUT_REPOSITORY: cyber-dojo/saver
-      CHECKOUT_REF: ${{ github.sha }}
-      CHECKOUT_DEPTH: 1
-      IMAGE_NAME: ${{ needs.setup.outputs.ecr_registry }}/${{ needs.setup.outputs.service_name }}
-      IMAGE_TAG: ${{ needs.setup.outputs.image_tag }}
-      IMAGE_BUILD_ARGS: |
+      checkout_repository: cyber-dojo/saver
+      checkout_ref: ${{ github.sha }}
+      checkout_fetch_depth: 1
+      image_name: ${{ needs.setup.outputs.ecr_registry }}/${{ needs.setup.outputs.service_name }}
+      image_tag: ${{ needs.setup.outputs.image_tag }}
+      image_build_args: |
         COMMIT_SHA=${{ github.sha }}
         BASE_IMAGE=${{ inputs.BASE_IMAGE }}
-      ATTEST_TO_KOSLI: ${{ github.ref == 'refs/heads/main' }}        
-      KOSLI_FLOW: ${{ env.KOSLI_FLOW }}
-      KOSLI_TRAIL: ${{ env.KOSLI_TRAIL }}
-      KOSLI_REFERENCE_NAME: saver
+      kosli_flow: ${{ env.KOSLI_FLOW }}
+      kosli_trail: ${{ env.KOSLI_TRAIL }}
+      kosli_reference_name: saver
+      attest_to_kosli: ${{ github.ref == 'refs/heads/main' }}        
     secrets:
-      KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+      kosli_api_token: ${{ secrets.KOSLI_API_TOKEN }}
 
 
   after-build-image:
     runs-on: ubuntu-latest
-    needs: [setup, build-image]
-    env:
-      IMAGE_NAME:        ${{ needs.setup.outputs.ecr_registry }}/${{ needs.setup.outputs.service_name }}
-      KOSLI_FINGERPRINT: ${{ needs.build-image.outputs.digest }}
+    needs: [build-image]
     steps:
       - name: Download docker image
         uses: cyber-dojo/download-artifact@main
         with:
-          IMAGE_NAME:   ${{ needs.setup.outputs.image_name }}
-          IMAGE_DIGEST: ${{ needs.build-image.outputs.digest }}
+          image_digest: ${{ needs.build-image.outputs.digest }}
       ...
 ```
 
@@ -65,6 +61,6 @@ v0.0.5
 To create a new tag:
 
 ```shell
-git tag -a v0.0.6 -m "Add KOSLI_API_TOKEN_STAGING to all workflows"
+git tag -a v0.0.6 -m "Some message"
 git push origin v0.0.6
 ```

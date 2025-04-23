@@ -9,75 +9,76 @@ on:
 
     inputs:
       # inputs for actions/checkout@v4
-      CHECKOUT_REPOSITORY:
+      checkout_repository:
         required: true
-        type: string
-      CHECKOUT_REF:
+        type: string        # eg cyberdojo/differ
+      checkout_ref:
         required: true
-        type: string
-      CHECKOUT_FETCH_DEPTH:
+        type: string        # eg ${{ github.sha }}
+      checkout_fetch_depth:
         required: true
-        type: string
+        type: string        # eg 1
 
       # inputs for docker/build-push-action@v6
-      IMAGE_NAME:            
+      image_name:
         required: true
-        type: string
-      IMAGE_TAG:            
+        type: string        # eg 244531986313.dkr.ecr.eu-central-1.amazonaws.com/differ
+      image_tag:
         required: true
-        type: string
-      IMAGE_BUILD_ARGS:
+        type: string        # eg 52ec808
+      image_build_args:
         required: false
         type: string
 
-      KOSLI_FLOW:
+      # inputs for Kosli CLI commands
+      kosli_flow:
         required: true
         type: string
-      KOSLI_TRAIL:
+      kosli_trail:           # eg ${{ vars.KOSLI_FLOW }}
         required: true
-        type: string
-      KOSLI_REFERENCE_NAME:  # eg saver
+        type: string         # eg ${{ inputs.KOSLI_TRAIL }}
+      kosli_reference_name:
         required: true
-        type: string
+        type: string         # eg saver
 
-      ATTEST_TO_KOSLI:
+      attest_to_kosli:
         required: false
-        type: boolean
+        type: boolean        # eg ${{ github.ref == 'refs/heads/main' }}
         default: true
-      KOSLI_CLI_VERSION:
+      kosli_cli_version:
         required: false
         type: string
         default: ${{ vars.KOSLI_CLI_VERSION }}
-      KOSLI_DEBUG:
+      kosli_debug:
         required: false
         type: string
         default: ${{ vars.KOSLI_DEBUG }}
-      KOSLI_DRY_RUN:
+      kosli_dry_run:
         required: false
         type: string
         default: ${{ vars.KOSLI_DRY_RUN }}
-      KOSLI_HOST:
+      kosli_host:
         required: false
         type: string
         default: ${{ vars.KOSLI_HOST }}
-      KOSLI_ORG:
+      kosli_org:
         required: false
         type: string
         default: ${{ vars.KOSLI_ORG }}
 
     secrets:
-      KOSLI_API_TOKEN:
+      kosli_api_token:
         required: true
 
 
 env:
-  KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
-  KOSLI_DEBUG:     ${{ inputs.KOSLI_DEBUG }}          # true/false
-  KOSLI_DRY_RUN:   ${{ inputs.KOSLI_DRY_RUN }}        # true/false
-  KOSLI_HOST:      ${{ inputs.KOSLI_HOST }}           # https://app.kosli.com
-  KOSLI_ORG:       ${{ inputs.KOSLI_ORG }}            # cyber-dojo
-  KOSLI_FLOW:      ${{ inputs.KOSLI_FLOW }}           # saver-ci
-  KOSLI_TRAIL:     ${{ inputs.KOSLI_TRAIL }}
+  KOSLI_API_TOKEN: ${{ secrets.kosli_api_token }}
+  KOSLI_DEBUG:     ${{ inputs.kosli_debug }}          # true/false
+  KOSLI_DRY_RUN:   ${{ inputs.kosli_dry_run }}        # true/false
+  KOSLI_HOST:      ${{ inputs.kosli_host }}           # https://app.kosli.com
+  KOSLI_ORG:       ${{ inputs.kosli_org }}            # cyber-dojo
+  KOSLI_FLOW:      ${{ inputs.kosli_flow }}           # saver-ci
+  KOSLI_TRAIL:     ${{ inputs.kosli_trail }}
 
   AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
   AWS_REGION:     ${{ vars.AWS_REGION }}
@@ -108,9 +109,9 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.CHECKOUT_REPOSITORY }}
-          ref: ${{ inputs.CHECKOUT_REF }}
-          fetch-depth: ${{ inputs.CHECKOUT_FETCH_DEPTH }}
+          repository: ${{ inputs.checkout_repository }}
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: ${{ inputs.checkout_fetch_depth }}
 
       - name: Print git status
         run:
@@ -126,8 +127,8 @@ jobs:
           context: .
           no-cache: true
           push: true
-          tags: ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
-          build-args: ${{ inputs.IMAGE_BUILD_ARGS }}
+          tags: ${{ inputs.image_name }}:${{ inputs.image_tag }}
+          build-args: ${{ inputs.image_build_args }}
           provenance: mode=max
           sbom: true
 
@@ -140,9 +141,8 @@ jobs:
 
       - name: Save server Docker image to cache for the following jobs
         run: |          
-          docker pull ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
-          # docker tag ${{ env.TAGGED_IMAGE }} merkely:latest
-          docker image save ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }} --output ${{ runner.temp }}/${{ env.DIGEST }}.tar
+          docker pull ${{ inputs.image_name }}:${{ inputs.image_tag }}
+          docker image save ${{ inputs.image_name }}:${{ inputs.image_tag }} --output ${{ runner.temp }}/${{ env.DIGEST }}.tar
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -152,19 +152,19 @@ jobs:
 
       - name: Get build metadata
         run:
-          docker buildx imagetools inspect ${{ inputs.IMAGE_NAME }}@${{ steps.docker_build.outputs.digest }}
+          docker buildx imagetools inspect ${{ inputs.image_name }}@${{ steps.docker_build.outputs.digest }}
             --format "{{ json .Provenance.SLSA }}" > provenance.json
 
       - name: Get SBOM file
         run:
-          docker buildx imagetools inspect ${{ inputs.IMAGE_NAME }}@${{ steps.docker_build.outputs.digest }}
+          docker buildx imagetools inspect ${{ inputs.image_name }}@${{ steps.docker_build.outputs.digest }}
             --format "{{ json .SBOM.SPDX }}" > sbom.spdx.json
 
       - name: Attest Build Provenance
         id: artifact-gh-attest
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ inputs.IMAGE_NAME }}
+          subject-name: ${{ inputs.image_name }}
           subject-digest: sha256:${{ env.DIGEST }}
           push-to-registry: true
 
@@ -178,7 +178,7 @@ jobs:
         uses: actions/attest-sbom@v2
         with:
           sbom-path: 'sbom.spdx.json'
-          subject-name: ${{ inputs.IMAGE_NAME }}
+          subject-name: ${{ inputs.image_name }}
           subject-digest: sha256:${{ env.DIGEST }}
 
       - name: Make sbom GH sigstore attestation index available to next steps
@@ -186,7 +186,7 @@ jobs:
           TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.sbom-gh-attest.outputs.bundle-path }})
           echo "SBOM_TLOG_INDEX=${TRANSPARENCY_LOG_INDEX}" >> ${GITHUB_ENV}
 
-      - name: Find details about workflow
+      - name: Show workflow details
         run: |
           echo "Workflow     => ${{ github.workflow }}"
           echo "Workflow ref => ${{ github.workflow_ref }}"
@@ -196,17 +196,17 @@ jobs:
         if: ${{ success() || failure() }}
         uses: kosli-dev/setup-cli-action@v2
         with:
-          version: ${{ inputs.KOSLI_CLI_VERSION }}
+          version: ${{ inputs.kosli_cli_version }}
 
       - name: Attest artifact to Kosli
-        if: ${{ inputs.ATTEST_TO_KOSLI == true && (success() || failure()) }}
+        if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
         run:
-          kosli attest artifact ${{ inputs.IMAGE_NAME }}:${{ inputs.IMAGE_TAG }}
+          kosli attest artifact ${{ inputs.image_name }}:${{ inputs.image_tag }}
             --fingerprint=${{ env.DIGEST }}
-            --name=${{ inputs.KOSLI_REFERENCE_NAME }}
+            --name=${{ inputs.kosli_reference_name }}
 
       - name: Attest GitHub attestation to Kosli
-        if: ${{ inputs.ATTEST_TO_KOSLI == true && (success() || failure()) }}
+        if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
         run:
           kosli attest generic 
             --name provenance-attestation
@@ -216,7 +216,7 @@ jobs:
             --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
 
       - name: Attest SBOM
-        if: ${{ inputs.ATTEST_TO_KOSLI == true && (success() || failure()) }}
+        if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
         run:
           kosli attest generic 
             --name sbom
