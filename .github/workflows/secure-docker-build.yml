@@ -135,7 +135,7 @@ jobs:
           echo "DIGEST=${DIGEST}" >> ${GITHUB_ENV}
           echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
 
-      - name: Save server Docker image to cache for the following jobs
+      - name: Save Docker image ready to upload
         run: |          
           docker pull ${{ inputs.image_name }}:${{ inputs.image_tag }}
           docker image save ${{ inputs.image_name }}:${{ inputs.image_tag }} --output ${{ runner.temp }}/${{ env.DIGEST }}.tar
@@ -198,8 +198,8 @@ jobs:
         if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
         run:
           kosli attest artifact ${{ inputs.image_name }}:${{ inputs.image_tag }}
-            --fingerprint=${{ env.DIGEST }}
-            --name=${{ inputs.kosli_reference_name }}
+            --fingerprint ${{ env.DIGEST }}
+            --name ${{ inputs.kosli_reference_name }}
 
       - name: Attest GitHub attestation to Kosli
         if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
