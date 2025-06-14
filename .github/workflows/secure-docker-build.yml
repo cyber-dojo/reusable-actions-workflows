@@ -6,6 +6,9 @@ on:
       digest:
         description: The SHA256 image digest
         value: ${{ jobs.secure-build.outputs.digest }}
+      tagged_image_name:
+        description: "eg 244531986313.dkr.ecr.eu-central-1.amazonaws.com/differ:52ec808"
+        value: ${{ jobs.secure-build.outputs.tagged_image_name }}
 
     inputs:
       # inputs for actions/checkout@v4
@@ -34,16 +37,16 @@ on:
       kosli_flow:
         required: true
         type: string
-      kosli_trail:           # eg ${{ vars.KOSLI_FLOW }}
+      kosli_trail:          # eg ${{ vars.KOSLI_FLOW }}
         required: true
-        type: string         # eg ${{ inputs.KOSLI_TRAIL }}
+        type: string        # eg ${{ inputs.KOSLI_TRAIL }}
       kosli_reference_name:
         required: true
-        type: string         # eg saver
+        type: string        # eg saver
 
       attest_to_kosli:
         required: false
-        type: boolean        # eg ${{ github.ref == 'refs/heads/main' }}
+        type: boolean       # eg ${{ github.ref == 'refs/heads/main' }}
         default: true
       kosli_cli_version:
         required: false
@@ -90,6 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       digest: ${{ steps.sanitize-digest.outputs.digest }}
+      tagged_image_name: ${{ inputs.image_name }}:${{ inputs.image_tag }}
     permissions:
       id-token: write
       contents: write
