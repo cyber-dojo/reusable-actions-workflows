@@ -99,6 +99,11 @@ jobs:
       contents: write
       attestations: write
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
