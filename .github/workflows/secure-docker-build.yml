@@ -11,7 +11,7 @@ on:
         value: ${{ jobs.secure-build.outputs.tagged_image_name }}
 
     inputs:
-      # inputs for actions/checkout@v4
+      # inputs for actions/checkout@v6
       checkout_repository:
         required: true
         type: string        # eg cyberdojo/differ
@@ -105,29 +105,29 @@ jobs:
           egress-policy: audit
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/gh_actions_services
           aws-region: ${{ env.AWS_REGION }}
           role-duration-seconds: 2400
           role-session-name: ${{ github.event.repository.name }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: ${{ inputs.checkout_repository }}
           ref: ${{ inputs.checkout_ref }}
           fetch-depth: ${{ inputs.checkout_fetch_depth }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Build and push Docker image to Amazon ECR
         id: docker_build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v5
         with:
           context: .
           no-cache: true
