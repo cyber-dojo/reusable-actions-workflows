@@ -113,7 +113,7 @@ jobs:
           role-session-name: ${{ github.event.repository.name }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -150,7 +150,7 @@ jobs:
           docker image save ${{ inputs.image_name }}:${{ inputs.image_tag }} --output ${{ runner.temp }}/${{ env.DIGEST }}.tar
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.DIGEST }}
           path: ${{ runner.temp }}/${{ env.DIGEST }}.tar
@@ -167,7 +167,7 @@ jobs:
 
       - name: Attest Build Provenance
         id: artifact-gh-attest
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ inputs.image_name }}
           subject-digest: sha256:${{ env.DIGEST }}
@@ -180,7 +180,7 @@ jobs:
       
       - name: Attest SBOM to Github
         id: sbom-gh-attest
-        uses: actions/attest-sbom@v2
+        uses: actions/attest@v4
         with:
           sbom-path: 'sbom.spdx.json'
           subject-name: ${{ inputs.image_name }}
