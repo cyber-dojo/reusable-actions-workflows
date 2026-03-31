@@ -22,7 +22,7 @@ on:
         required: true
         type: string        # eg 1
 
-      # inputs for docker/build-push-action@v6
+      # inputs for docker/build-push-action@v7
       image_name:
         required: true
         type: string        # eg 244531986313.dkr.ecr.eu-central-1.amazonaws.com/differ
@@ -127,7 +127,7 @@ jobs:
 
       - name: Build and push Docker image to Amazon ECR
         id: docker_build
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           no-cache: true
@@ -199,7 +199,7 @@ jobs:
 
       - name: Setup Kosli CLI
         if: ${{ success() || failure() }}
-        uses: kosli-dev/setup-cli-action@v2
+        uses: kosli-dev/setup-cli-action@v3
         with:
           version: ${{ inputs.kosli_cli_version }}
 
