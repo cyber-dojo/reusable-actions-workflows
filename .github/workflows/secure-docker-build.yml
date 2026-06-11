@@ -32,6 +32,14 @@ on:
       image_build_args:
         required: false
         type: string
+      build_context:
+        required: false
+        type: string        # eg services/foo (defaults to repo root)
+        default: .
+      dockerfile:
+        required: false
+        type: string        # eg services/foo/Dockerfile (defaults to ./Dockerfile)
+        default: ./Dockerfile
 
       # inputs for Kosli CLI commands
       kosli_flow:
@@ -130,7 +138,8 @@ jobs:
         id: docker_build
         uses: docker/build-push-action@v7
         with:
-          context: .
+          context: ${{ inputs.build_context }}
+          file: ${{ inputs.dockerfile }}
           no-cache: true
           push: true
           tags: ${{ inputs.image_name }}:${{ inputs.image_tag }}
