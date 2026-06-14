@@ -217,6 +217,7 @@ jobs:
         if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
         run:
           kosli attest artifact ${{ inputs.image_name }}:${{ inputs.image_tag }}
+            --annotate type=build
             --fingerprint ${{ env.DIGEST }}
             --name ${{ inputs.kosli_reference_name }}
 
