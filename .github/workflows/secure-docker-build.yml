@@ -224,8 +224,9 @@ jobs:
       - name: Attest GitHub attestation to Kosli
         if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
         run:
-          kosli attest generic 
-            --name provenance-attestation
+          kosli attest decision
+            --control SDLC-CTRL-0002
+            --name provenance
             --fingerprint ${{ env.DIGEST }}
             --attachments provenance.json
             --external-url github-attestation=${{ steps.artifact-gh-attest.outputs.attestation-url }}
@@ -234,7 +235,8 @@ jobs:
       - name: Attest SBOM
         if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
         run:
-          kosli attest generic 
+          kosli attest decision
+            --control SDLC-CTRL-0004
             --name sbom
             --fingerprint ${{ env.DIGEST }}
             --attachments sbom.spdx.json
