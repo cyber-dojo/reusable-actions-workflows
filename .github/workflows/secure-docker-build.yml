@@ -226,6 +226,7 @@ jobs:
         run:
           kosli attest decision
             --control SDLC-CTRL-0002
+            --compliant=true
             --name provenance
             --fingerprint ${{ env.DIGEST }}
             --attachments provenance.json
@@ -237,6 +238,7 @@ jobs:
         run:
           kosli attest decision
             --control SDLC-CTRL-0004
+            --compliant=true
             --name sbom
             --fingerprint ${{ env.DIGEST }}
             --attachments sbom.spdx.json
