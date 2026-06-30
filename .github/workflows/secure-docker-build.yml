@@ -221,17 +221,42 @@ jobs:
             --fingerprint ${{ env.DIGEST }}
             --name ${{ inputs.kosli_reference_name }}
 
-      - name: Attest GitHub attestation to Kosli
+      - name: Evaluate
+        if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
+        id: evaluate
+        run: |
+          kosli evaluate trail ${{inputs.kosli_trail}} \
+            --policy SDLC-CTRL-0002-binary-provenance.rego \
+            --no-assert \
+            --output json > eval-report.json
+          echo "compliant=$(jq -r '.allow' eval-report.json)" >> ${GITHUB_OUTPUT}
+          params=null
+          jq --argjson params "$params" '{params: $params, allow: .allow, violations: .violations}' eval-report.json > eval-evidence.json
+
+      - name: Attest SDLC-CTRL-0002 decision
         if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
         run:
           kosli attest decision
             --control SDLC-CTRL-0002
-            --compliant=true
+            --compliant=${{ steps.evaluate.outputs.compliant }}
             --name provenance
             --fingerprint ${{ env.DIGEST }}
             --attachments provenance.json
             --external-url github-attestation=${{ steps.artifact-gh-attest.outputs.attestation-url }}
             --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
+            --user-data eval-evidence.json
+
+      # - name: Attest provenance to Kosli
+      #   if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
+      #   run:
+      #     kosli attest decision
+      #       --control SDLC-CTRL-0002
+      #       --compliant=true
+      #       --name provenance
+      #       --fingerprint ${{ env.DIGEST }}
+      #       --attachments provenance.json
+      #       --external-url github-attestation=${{ steps.artifact-gh-attest.outputs.attestation-url }}
+      #       --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
 
       - name: Attest SBOM
         if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
