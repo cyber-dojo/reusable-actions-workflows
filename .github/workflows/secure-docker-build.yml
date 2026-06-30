@@ -231,6 +231,7 @@ jobs:
           curl --fail-with-body "${REGO_POLICY_URL}" > "${REGO_POLICY_FILENAME}"
           kosli evaluate trail ${{inputs.kosli_trail}} \
             --policy "${REGO_POLICY_FILENAME}" \
+            --params '{"artifact_name": "${{ inputs.kosli_reference_name }}"}' \
             --no-assert \
             --output json > eval-report.json
           echo "compliant=$(jq -r '.allow' eval-report.json)" >> "${GITHUB_OUTPUT}"
