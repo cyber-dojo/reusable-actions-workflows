@@ -12,9 +12,8 @@ import rego.v1
 #
 # This policy evaluates the SLSA v1 provenance the builder itself attested
 # (from the GitHub sigstore bundle), distilled into a provenance-facts custom
-# attestation by provenance-facts.jq. It goes beyond the trail-metadata checks
-# in SDLC-CTRL-0002-binary-provenance.rego by verifying, against the builder's
-# own signed statement:
+# attestation by provenance-facts.jq. It verifies, against the builder's own
+# signed statement:
 #   known identity  -> the provenance subject digest IS this artifact's fingerprint
 #   known source    -> the builder-attested source commit IS the trail's commit,
 #                       from an expected cyber-dojo repository
