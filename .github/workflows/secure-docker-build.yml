@@ -108,8 +108,10 @@ jobs:
       attestations: write
       artifact-metadata: write
     env:
-      REGO_POLICY_FILENAME:      SDLC-CTRL-0002-binary-provenance.rego
-      REGO_POLICY_URL:           https://raw.githubusercontent.com/cyber-dojo/reusable-actions-workflows/refs/heads/main/SDLC-CTRL-0002-binary-provenance.rego
+      REGO_POLICY_FILENAME:      SDLC-CTRL-0002-slsa-provenance.rego
+      REGO_POLICY_URL:           https://raw.githubusercontent.com/cyber-dojo/reusable-actions-workflows/refs/heads/main/SDLC-CTRL-0002-slsa-provenance.rego
+      PROV_FACTS_JQ_FILENAME:    provenance-facts.jq
+      PROV_FACTS_JQ_URL:         https://raw.githubusercontent.com/cyber-dojo/reusable-actions-workflows/refs/heads/main/provenance-facts.jq
       SBOM_REGO_POLICY_FILENAME: SDLC-CTRL-0004-sbom.rego
       SBOM_REGO_POLICY_URL:      https://raw.githubusercontent.com/cyber-dojo/reusable-actions-workflows/refs/heads/main/SDLC-CTRL-0004-sbom.rego
       SBOM_FACTS_JQ_FILENAME:    sbom-facts.jq
@@ -174,11 +176,6 @@ jobs:
           name: ${{ env.DIGEST }}
           path: ${{ runner.temp }}/${{ env.DIGEST }}.tar
 
-      - name: Get build metadata
-        run:
-          docker buildx imagetools inspect ${{ inputs.image_name }}@${{ steps.docker_build.outputs.digest }}
-            --format "{{ json .Provenance.SLSA }}" > provenance.json
-
       - name: Get SBOM file
         run:
           docker buildx imagetools inspect ${{ inputs.image_name }}@${{ steps.docker_build.outputs.digest }}
@@ -196,6 +193,9 @@ jobs:
         run: |
           TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.artifact-gh-attest.outputs.bundle-path }})
           echo "ARTIFACT_TLOG_INDEX=${TRANSPARENCY_LOG_INDEX}" >> ${GITHUB_ENV}
+          # Keep the GitHub sigstore bundle (it carries the SLSA provenance predicate)
+          # so a later step can distill it into provenance-facts.
+          cp "${{ steps.artifact-gh-attest.outputs.bundle-path }}" github-provenance.json
       
       - name: Attest SBOM to Github
         id: sbom-gh-attest
@@ -230,20 +230,44 @@ jobs:
             --fingerprint ${{ env.DIGEST }}
             --name ${{ inputs.kosli_reference_name }}
 
+      # Distill the GitHub sigstore bundle (saved to github-provenance.json above)
+      # into the provenance-facts contract that SDLC-CTRL-0002-slsa-provenance.rego
+      # evaluates. provenance-facts.jq is the single distill filter shared with the
+      # repo's rego tests.
+      - name: Distill provenance facts
+        run: |
+          curl --fail-with-body "${PROV_FACTS_JQ_URL}" > "${PROV_FACTS_JQ_FILENAME}"
+          jq --from-file "${PROV_FACTS_JQ_FILENAME}" github-provenance.json > provenance-facts.json
+
+      - name: Attest provenance facts to Kosli
+        if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
+        run:
+          kosli attest custom
+            --type provenance-facts
+            --name provenance-facts
+            --fingerprint ${{ env.DIGEST }}
+            --attestation-data provenance-facts.json
+
       - name: Evaluate
         if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
         id: evaluate
         run: |
           curl --fail-with-body "${REGO_POLICY_URL}" > "${REGO_POLICY_FILENAME}"
-          PARAMS='{"artifact_name": "${{ inputs.kosli_reference_name }}"}'
+          PARAMS=$(jq --null-input --arg an "${{ inputs.kosli_reference_name }}" '{
+            artifact_name:               $an,
+            provenance_attestation_name: "provenance-facts",
+            allowed_predicate_types:     ["https://slsa.dev/provenance/v1"],
+            allowed_build_types:         ["https://actions.github.io/buildtypes/workflow/v1"],
+            expected_builder_id_prefix:  "https://github.com/cyber-dojo/reusable-actions-workflows/.github/workflows/",
+            expected_source_repo_prefix: "https://github.com/cyber-dojo/"
+          }')
           kosli evaluate trail ${{inputs.kosli_trail}} \
             --policy "${REGO_POLICY_FILENAME}" \
             --params "${PARAMS}" \
             --no-assert \
             --output json > eval-report.json
           echo "compliant=$(jq --raw-output '.allow' eval-report.json)" >> "${GITHUB_OUTPUT}"
-          params="${PARAMS}"
-          jq --argjson params "$params" '{params: $params, allow: .allow, violations: .violations}' eval-report.json > eval-evidence.json
+          jq --argjson params "${PARAMS}" '{params: $params, allow: .allow, violations: .violations}' eval-report.json > eval-evidence.json
 
       - name: Attest SDLC-CTRL-0002 decision
         if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
@@ -251,10 +275,10 @@ jobs:
           kosli attest decision
             --control SDLC-CTRL-0002
             --compliant=${{ steps.evaluate.outputs.compliant }}
-            --name provenance
+            --name provenance-decision
             --fingerprint ${{ env.DIGEST }}
             --attachments "${REGO_POLICY_FILENAME}"
-            --attachments provenance.json
+            --attachments github-provenance.json
             --external-url github-attestation=${{ steps.artifact-gh-attest.outputs.attestation-url }}
             --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
             --user-data eval-evidence.json
