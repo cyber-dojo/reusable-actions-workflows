@@ -241,7 +241,7 @@ jobs:
             --params "${PARAMS}" \
             --no-assert \
             --output json > eval-report.json
-          echo "compliant=$(jq -r '.allow' eval-report.json)" >> "${GITHUB_OUTPUT}"
+          echo "compliant=$(jq --raw-output '.allow' eval-report.json)" >> "${GITHUB_OUTPUT}"
           params="${PARAMS}"
           jq --argjson params "$params" '{params: $params, allow: .allow, violations: .violations}' eval-report.json > eval-evidence.json
 
@@ -266,7 +266,7 @@ jobs:
       - name: Distill SBOM facts
         run: |
           curl --fail-with-body "${SBOM_FACTS_JQ_URL}" > "${SBOM_FACTS_JQ_FILENAME}"
-          jq -f "${SBOM_FACTS_JQ_FILENAME}" sbom.spdx.json > sbom-facts.json
+          jq --from-file "${SBOM_FACTS_JQ_FILENAME}" sbom.spdx.json > sbom-facts.json
 
       - name: Attest SBOM facts to Kosli
         if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
@@ -289,18 +289,25 @@ jobs:
             echo '{"exceptions": []}' > "${SBOM_EXCEPTIONS_FILENAME}"
           fi
 
-          PARAMS=$(jq -n \
+          PARAMS=$(jq --null-input \
             --arg an "${{ inputs.kosli_reference_name }}" \
             --arg now "$(date -u +%Y-%m-%d)" \
             --slurpfile exc "${SBOM_EXCEPTIONS_FILENAME}" \
-            '{artifact_name: $an, sbom_attestation_name: "sbom-facts", min_packages: 1, allowed_spec_versions: ["SPDX-2.3"], now: $now, exceptions: ($exc[0].exceptions // [])}')
+            '{
+              artifact_name:         $an,
+              sbom_attestation_name: "sbom-facts",
+              min_packages:          1,
+              allowed_spec_versions: ["SPDX-2.3"],
+              now:                   $now,
+              exceptions:            ($exc[0].exceptions // [])
+            }')
 
           kosli evaluate trail ${{inputs.kosli_trail}} \
             --policy "${SBOM_REGO_POLICY_FILENAME}" \
             --params "${PARAMS}" \
             --no-assert \
             --output json > sbom-eval-report.json
-          echo "compliant=$(jq -r '.allow' sbom-eval-report.json)" >> "${GITHUB_OUTPUT}"
+          echo "compliant=$(jq --raw-output '.allow' sbom-eval-report.json)" >> "${GITHUB_OUTPUT}"
           jq --argjson params "${PARAMS}" '{params: $params, allow: .allow, violations: .violations}' sbom-eval-report.json > sbom-eval-evidence.json
 
       - name: Attest SDLC-CTRL-0004 decision
