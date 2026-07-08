@@ -288,11 +288,13 @@ jobs:
             echo "no exceptions file for ${{ inputs.kosli_reference_name }}; evaluating with none"
             echo '{"exceptions": []}' > "${SBOM_EXCEPTIONS_FILENAME}"
           fi
+
           PARAMS=$(jq -n \
             --arg an "${{ inputs.kosli_reference_name }}" \
             --arg now "$(date -u +%Y-%m-%d)" \
             --slurpfile exc "${SBOM_EXCEPTIONS_FILENAME}" \
             '{artifact_name: $an, sbom_attestation_name: "sbom-facts", min_packages: 1, allowed_spec_versions: ["SPDX-2.3"], now: $now, exceptions: ($exc[0].exceptions // [])}')
+
           kosli evaluate trail ${{inputs.kosli_trail}} \
             --policy "${SBOM_REGO_POLICY_FILENAME}" \
             --params "${PARAMS}" \
