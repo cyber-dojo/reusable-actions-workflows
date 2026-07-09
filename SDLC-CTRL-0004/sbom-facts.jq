@@ -1,5 +1,5 @@
 # Distill an SPDX 2.3 JSON document (produced by `docker buildx ... --sbom`, via
-# syft) into the small facts contract that SDLC-CTRL-0004-sbom.rego evaluates.
+# syft) into the small facts contract that sbom.rego evaluates.
 # A Kosli trail policy cannot read the raw SPDX blob; only this distilled JSON,
 # attested with `kosli attest custom --attestation-data`, is visible to rego.
 #

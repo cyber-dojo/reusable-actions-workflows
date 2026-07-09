@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Tests for SDLC-CTRL-0004-sbom.rego and its distill filter sbom-facts.jq.
+# Tests for SDLC-CTRL-0004/sbom.rego and its distill filter sbom-facts.jq.
 #
 # The baseline is a genuine SBOM: tests/fixtures/creator-sbom.spdx.json is a
 # real syft SPDX slice taken from a cyber-dojo creator-ci build. Tests mutate
@@ -9,22 +9,22 @@
 #
 # The genuine creator SBOM contains packages that fail the strict per-package
 # checks (no license: .ruby-rundeps, minitest-ci, ruby, selenium-manager; no
-# purl: selenium-manager). sbom-exceptions.creator.json waives exactly those,
-# so the policy is only compliant on the real SBOM when those exceptions apply.
+# purl: selenium-manager). sbom-overrides.creator.json waives exactly those,
+# so the policy is only compliant on the real SBOM when those overrides apply.
 
 readonly my_dir="$(cd "$(dirname "${0}")" && pwd)"
-readonly rego_dir="$(cd "${my_dir}/.." && pwd)"
+readonly repo_dir="$(cd "${my_dir}/.." && pwd)"
 
-readonly REGO="${rego_dir}/SDLC-CTRL-0004-sbom.rego"
-readonly DISTILL="${rego_dir}/sbom-facts.jq"
+readonly REGO="${repo_dir}/SDLC-CTRL-0004/sbom.rego"
+readonly DISTILL="${repo_dir}/SDLC-CTRL-0004/sbom-facts.jq"
 readonly FIXTURE="${my_dir}/fixtures/creator-sbom.spdx.json"
-readonly CREATOR_EXCEPTIONS="${rego_dir}/sbom-exceptions.creator.json"
+readonly CREATOR_OVERRIDES="${repo_dir}/SDLC-CTRL-0004/sbom-overrides.creator.json"
 
-# An evaluation date on which the example exceptions (expires 2027-01-08) are active.
+# An evaluation date on which the example overrides (expires 2027-01-08) are active.
 readonly NOW="2026-07-08"
 
-# Base params with no exceptions; individual tests override via make_params.
-readonly BASE_PARAMS='{"artifact_name":"creator","sbom_attestation_name":"sbom-facts","min_packages":1,"allowed_spec_versions":["SPDX-2.3"],"now":"2026-07-08","exceptions":[]}'
+# Base params with no overrides; individual tests override via make_params.
+readonly BASE_PARAMS='{"artifact_name":"creator","sbom_attestation_name":"sbom-facts","min_packages":1,"allowed_spec_versions":["SPDX-2.3"],"now":"2026-07-08","overrides":[]}'
 
 # Distill an SPDX document (passed as a JSON string) through the shared filter.
 distill()
@@ -32,20 +32,20 @@ distill()
   echo "${1}" | jq -f "${DISTILL}"
 }
 
-# The exceptions array from a per-service allow-list file.
-exceptions_of()
+# The overrides array from a per-service allow-list file.
+overrides_of()
 {
-  jq -c '.exceptions' "${1}"
+  jq -c '.overrides' "${1}"
 }
 
-# Build a --params object: base config plus an evaluation date and exceptions.
+# Build a --params object: base config plus an evaluation date and overrides.
 # now="" omits the now param entirely (to test the missing-now fail-safe).
 make_params()
 {
   local -r now="${1}"
-  local -r exceptions="${2:-[]}"
-  jq -n --arg now "${now}" --argjson exc "${exceptions}" \
-    '{artifact_name:"creator", sbom_attestation_name:"sbom-facts", min_packages:1, allowed_spec_versions:["SPDX-2.3"], exceptions:$exc}
+  local -r overrides="${2:-[]}"
+  jq -n --arg now "${now}" --argjson ovr "${overrides}" \
+    '{artifact_name:"creator", sbom_attestation_name:"sbom-facts", min_packages:1, allowed_spec_versions:["SPDX-2.3"], overrides:$ovr}
      + (if $now == "" then {} else {now:$now} end)'
 }
 
@@ -118,17 +118,17 @@ test_distill_reports_the_real_document_metadata()
 }
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Exceptions allow-list, driven off the genuine SBOM
+# Overrides allow-list, driven off the genuine SBOM
 
-test_allow_genuine_sbom_when_service_exceptions_cover_the_gaps()
+test_allow_genuine_sbom_when_service_overrides_cover_the_gaps()
 {
-  # The real creator SBOM only becomes compliant when its exceptions apply.
+  # The real creator SBOM only becomes compliant when its overrides apply.
   local -r facts="$(distill "$(cat "${FIXTURE}")")"
-  evaluate_facts "${facts}" "$(make_params "${NOW}" "$(exceptions_of "${CREATOR_EXCEPTIONS}")")"
+  evaluate_facts "${facts}" "$(make_params "${NOW}" "$(overrides_of "${CREATOR_OVERRIDES}")")"
   assert_allow
 }
 
-test_deny_genuine_sbom_when_no_exceptions_apply()
+test_deny_genuine_sbom_when_no_overrides_apply()
 {
   # Only the purl gap fails; licenseless packages (.ruby-rundeps, minitest-ci,
   # ruby) are no longer checked, so they must not appear as violations.
@@ -139,32 +139,32 @@ test_deny_genuine_sbom_when_no_exceptions_apply()
   refute_violation_message "package 'ruby' has no declared license"
 }
 
-test_deny_when_the_exception_has_expired()
+test_deny_when_the_override_has_expired()
 {
-  # Same exceptions, but evaluated after their expiry date: the waivers lapse.
+  # Same overrides, but evaluated after their expiry date: the waivers lapse.
   local -r facts="$(distill "$(cat "${FIXTURE}")")"
-  evaluate_facts "${facts}" "$(make_params "2027-06-01" "$(exceptions_of "${CREATOR_EXCEPTIONS}")")"
+  evaluate_facts "${facts}" "$(make_params "2027-06-01" "$(overrides_of "${CREATOR_OVERRIDES}")")"
   assert_deny
   assert_violation_message "package 'selenium-manager' has no resolvable purl identity"
-  assert_violation_message "exception for package 'selenium-manager' check 'purl' expired on 2027-01-08 -- renew or remove it"
+  assert_violation_message "override for package 'selenium-manager' check 'purl' expired on 2027-01-08 -- renew or remove it"
 }
 
 test_no_waiver_when_the_now_param_is_absent()
 {
-  # Without an evaluation date, no exception can be active -- fail toward non-compliance.
+  # Without an evaluation date, no override can be active -- fail toward non-compliance.
   local -r facts="$(distill "$(cat "${FIXTURE}")")"
-  evaluate_facts "${facts}" "$(make_params "" "$(exceptions_of "${CREATOR_EXCEPTIONS}")")"
+  evaluate_facts "${facts}" "$(make_params "" "$(overrides_of "${CREATOR_OVERRIDES}")")"
   assert_deny
   assert_violation_message "package 'selenium-manager' has no resolvable purl identity"
 }
 
-test_exception_waives_only_its_named_check()
+test_override_waives_only_its_named_check()
 {
   # A package missing both version and purl, waived only for purl: the purl
   # check passes while the version check still fails. Per-check granularity.
   local -r facts="$(facts_with '[{"name":"selenium-manager","version":"","license":"NOASSERTION","purl":""}]')"
-  local -r exc='[{"package":"selenium-manager","check":"purl","reason":"vendored binary, no purl","expires":"2027-01-08"}]'
-  evaluate_facts "${facts}" "$(make_params "${NOW}" "${exc}")"
+  local -r ovr='[{"package":"selenium-manager","check":"purl","reason":"vendored binary, no purl","expires":"2027-01-08"}]'
+  evaluate_facts "${facts}" "$(make_params "${NOW}" "${ovr}")"
   assert_deny
   assert_violation_message "package 'selenium-manager' has no concrete version"
   refute_violation_message "package 'selenium-manager' has no resolvable purl identity"

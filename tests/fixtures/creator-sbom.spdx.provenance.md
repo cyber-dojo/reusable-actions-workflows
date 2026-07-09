@@ -1,7 +1,7 @@
 # Provenance of `creator-sbom.spdx.json`
 
 `creator-sbom.spdx.json` is a genuine **syft**-generated SPDX 2.3 SBOM slice
-used as the baseline test fixture for `SDLC-CTRL-0004-sbom.rego` and
+used as the baseline test fixture for `SDLC-CTRL-0004/sbom.rego` and
 `sbom-facts.jq`. It was produced by `syft-v1.42.3` (`docker buildx ... --sbom`),
 so its per-package fields follow syft's conventions -- in particular the real
 license lives in `licenseDeclared` while `licenseConcluded` stays `NOASSERTION`.

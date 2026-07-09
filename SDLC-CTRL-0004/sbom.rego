@@ -19,7 +19,7 @@ import rego.v1
 # so gating on license would fail every build without adding real assurance.
 #
 # Per-package checks are strict (every package must satisfy them) except where a
-# package is explicitly waived by the per-service exceptions allow-list (see PARAMS).
+# package is explicitly waived by the per-service overrides allow-list (see PARAMS).
 #
 # WHAT THIS POLICY READS
 # ----------------------
@@ -61,16 +61,16 @@ import rego.v1
 #   sbom_attestation_name  --name of the custom SBOM-facts attestation (eg "sbom-facts")
 #   min_packages           minimum package count for a non-empty inventory (eg 1)
 #   allowed_spec_versions  allowed SPDX spec versions (eg ["SPDX-2.3"])
-#   now                    evaluation date "YYYY-MM-DD"; exceptions expire against it
-#   exceptions             per-service allow-list (see sbom-exceptions.schema.json).
+#   now                    evaluation date "YYYY-MM-DD"; overrides expire against it
+#   overrides             per-service allow-list (see sbom-overrides.schema.json).
 #                          Each entry waives one check for one package:
 #                            {package, check: version|purl, reason, expires}
 #                          A missing / expired / malformed entry waives nothing.
 #
 # Every param is aliased at the top. A missing param becomes undefined, so the
 # rule that uses it fails and allow stays false -- fail toward non-compliance.
-# The exceptions list is additive (it only makes packages pass), so a missing or
-# invalid exceptions list makes fewer packages pass -- also fail toward non-compliance.
+# The overrides list is additive (it only makes packages pass), so a missing or
+# invalid overrides list makes fewer packages pass -- also fail toward non-compliance.
 
 default allow := false
 
@@ -86,8 +86,8 @@ sbom_attestation_name := data.params.sbom_attestation_name
 
 min_packages := data.params.min_packages
 
-# Evaluation date ("YYYY-MM-DD") used to expire exceptions. If absent, no
-# exception is active -- exemptions fail toward non-compliance.
+# Evaluation date ("YYYY-MM-DD") used to expire overrides. If absent, no
+# override is active -- exemptions fail toward non-compliance.
 now_date := data.params.now
 
 # If absent the comprehension yields the empty set, blocking every document.
@@ -134,26 +134,26 @@ field_of(pkg, "version") := pkg.version
 field_of(pkg, "purl") := pkg.purl
 
 # A package satisfies a check when the field is set, or when the package is
-# explicitly exempted from that check by the exceptions allow-list.
+# explicitly exempted from that check by the overrides allow-list.
 package_satisfies(pkg, check) if not is_unset(field_of(pkg, check))
 
 package_satisfies(pkg, check) if exempt(pkg, check)
 
-# An exceptions entry waives one check for one package only when it has a
+# An overrides entry waives one check for one package only when it has a
 # non-empty reason and is not expired. A missing / malformed / expired entry
 # waives nothing.
 exempt(pkg, check) if {
-	some e in data.params.exceptions
+	some e in data.params.overrides
 	e.package == pkg.name
 	e.check == check
 	is_string(e.reason)
 	e.reason != ""
-	exception_active(e)
+	override_active(e)
 }
 
 # Active while the evaluation date is on or before the entry's expiry date.
 # Both are "YYYY-MM-DD", so a lexicographic compare is a chronological compare.
-exception_active(e) if {
+override_active(e) if {
 	is_string(e.expires)
 	is_string(now_date)
 	e.expires >= now_date
@@ -243,10 +243,10 @@ violations contains sprintf("package '%v' has no resolvable purl identity", [pkg
 	not exempt(pkg, "purl")
 }
 
-# An expired exception no longer waives its package, so the check above fires
-# again; this names the stale exception so it can be renewed or removed.
-violations contains sprintf("exception for package '%v' check '%v' expired on %v -- renew or remove it", [e.package, e.check, e.expires]) if {
-	some e in data.params.exceptions
+# An expired override no longer waives its package, so the check above fires
+# again; this names the stale override so it can be renewed or removed.
+violations contains sprintf("override for package '%v' check '%v' expired on %v -- renew or remove it", [e.package, e.check, e.expires]) if {
+	some e in data.params.overrides
 	is_string(e.expires)
 	is_string(now_date)
 	e.expires < now_date

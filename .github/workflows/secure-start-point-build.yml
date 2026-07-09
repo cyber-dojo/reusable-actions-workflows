@@ -10,9 +10,8 @@ name: Secure start-point build
 #   - there is no SLSA provenance predicate (`provenance: mode=max`), so the
 #     provenance decision is not given a provenance.json attachment.
 # Everything downstream (Kosli attest artifact / provenance / sbom, the distill,
-# evaluate and decision steps) is identical to secure-docker-build.yml. The SBOM
-# block is deliberately a copy for now; it can be factored into a shared workflow
-# later.
+# evaluate and decision steps) is shared with secure-docker-build.yml through the
+# attest-and-evaluate composite action.
 
 on:
   workflow_call:
@@ -114,22 +113,16 @@ jobs:
       contents: write
       attestations: write
       artifact-metadata: write
-    env:
-      REGO_POLICY_FILENAME:      SDLC-CTRL-0002-slsa-provenance.rego
-      REGO_POLICY_URL:           https://raw.githubusercontent.com/cyber-dojo/reusable-actions-workflows/refs/heads/main/SDLC-CTRL-0002-slsa-provenance.rego
-      PROV_FACTS_JQ_FILENAME:    provenance-facts.jq
-      PROV_FACTS_JQ_URL:         https://raw.githubusercontent.com/cyber-dojo/reusable-actions-workflows/refs/heads/main/provenance-facts.jq
-      SBOM_REGO_POLICY_FILENAME: SDLC-CTRL-0004-sbom.rego
-      SBOM_REGO_POLICY_URL:      https://raw.githubusercontent.com/cyber-dojo/reusable-actions-workflows/refs/heads/main/SDLC-CTRL-0004-sbom.rego
-      SBOM_FACTS_JQ_FILENAME:    sbom-facts.jq
-      SBOM_FACTS_JQ_URL:         https://raw.githubusercontent.com/cyber-dojo/reusable-actions-workflows/refs/heads/main/sbom-facts.jq
-      SBOM_EXCEPTIONS_FILENAME:  sbom-exceptions.${{ inputs.kosli_reference_name }}.json
-      SBOM_EXCEPTIONS_URL:       https://raw.githubusercontent.com/cyber-dojo/reusable-actions-workflows/refs/heads/main/sbom-exceptions.${{ inputs.kosli_reference_name }}.json
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@v2
         with:
           egress-policy: audit
+
+      - name: Run rego policy tests as a build gate
+        uses: cyber-dojo/reusable-actions-workflows/.github/actions/run-rego-tests@main
+        with:
+          kosli_cli_version: ${{ inputs.kosli_cli_version }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -195,170 +188,17 @@ jobs:
           output-file: sbom.spdx.json
           upload-artifact: false
 
-      - name: Attest Build Provenance
-        id: artifact-gh-attest
-        uses: actions/attest-build-provenance@v4
-        with:
-          subject-name: ${{ inputs.image_name }}
-          subject-digest: sha256:${{ env.DIGEST }}
-          push-to-registry: true
-
-      - name: Make artifact GH sigstore attestation index available to next steps
-        run: |
-          TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.artifact-gh-attest.outputs.bundle-path }})
-          echo "ARTIFACT_TLOG_INDEX=${TRANSPARENCY_LOG_INDEX}" >> ${GITHUB_ENV}
-          # The GitHub-generated sigstore bundle carries the SLSA provenance predicate;
-          # attach it to the provenance decision in place of a buildkit provenance.json.
-          cp "${{ steps.artifact-gh-attest.outputs.bundle-path }}" github-provenance.json
-
-      - name: Attest SBOM to Github
-        id: sbom-gh-attest
-        uses: actions/attest@v4
-        with:
-          sbom-path: 'sbom.spdx.json'
-          subject-name: ${{ inputs.image_name }}
-          subject-digest: sha256:${{ env.DIGEST }}
-
-      - name: Make sbom GH sigstore attestation index available to next steps
-        run: |
-          TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.sbom-gh-attest.outputs.bundle-path }})
-          echo "SBOM_TLOG_INDEX=${TRANSPARENCY_LOG_INDEX}" >> ${GITHUB_ENV}
-
-      - name: Show workflow details
-        run: |
-          echo "Workflow     => ${{ github.workflow }}"
-          echo "Workflow ref => ${{ github.workflow_ref }}"
-          echo "Workflow sha => ${{ github.workflow_sha }}"
-
-      - name: Setup Kosli CLI
+      # Attest the image and SBOM to GitHub and Kosli, distill provenance and
+      # SBOM facts, evaluate them against SDLC-CTRL-0002 and SDLC-CTRL-0004, and
+      # attest the two decisions. Shared with secure-docker-build.yml. Reads
+      # sbom.spdx.json, ${{ env.DIGEST }} and the KOSLI_* env vars set above.
+      - name: Attest and evaluate
         if: ${{ success() || failure() }}
-        uses: kosli-dev/setup-cli-action@v5
+        uses: cyber-dojo/reusable-actions-workflows/.github/actions/attest-and-evaluate@main
         with:
-          version: ${{ inputs.kosli_cli_version }}
-
-      - name: Attest artifact to Kosli
-        if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
-        run:
-          kosli attest artifact ${{ inputs.image_name }}:${{ inputs.image_tag }}
-            --annotate type=build
-            --fingerprint ${{ env.DIGEST }}
-            --name ${{ inputs.kosli_reference_name }}
-
-      # Distill the GitHub sigstore bundle (written to github-provenance.json by the
-      # actions/attest-build-provenance step above) into the provenance-facts contract
-      # that SDLC-CTRL-0002-slsa-provenance.rego evaluates. provenance-facts.jq is the
-      # single distill filter shared with the repo's rego tests.
-      - name: Distill provenance facts
-        run: |
-          curl --fail-with-body "${PROV_FACTS_JQ_URL}" > "${PROV_FACTS_JQ_FILENAME}"
-          jq --from-file "${PROV_FACTS_JQ_FILENAME}" github-provenance.json > provenance-facts.json
-
-      - name: Attest provenance facts to Kosli
-        if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
-        run:
-          kosli attest custom
-            --type provenance-facts
-            --name provenance-facts
-            --fingerprint ${{ env.DIGEST }}
-            --attestation-data provenance-facts.json
-
-      - name: Evaluate
-        if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
-        id: evaluate
-        run: |
-          curl --fail-with-body "${REGO_POLICY_URL}" > "${REGO_POLICY_FILENAME}"
-          PARAMS=$(jq --null-input --arg an "${{ inputs.kosli_reference_name }}" '{
-            artifact_name:               $an,
-            provenance_attestation_name: "provenance-facts",
-            allowed_predicate_types:     ["https://slsa.dev/provenance/v1"],
-            allowed_build_types:         ["https://actions.github.io/buildtypes/workflow/v1"],
-            expected_builder_id_prefix:  "https://github.com/cyber-dojo/reusable-actions-workflows/.github/workflows/",
-            expected_source_repo_prefix: "https://github.com/cyber-dojo/"
-          }')
-          kosli evaluate trail ${{inputs.kosli_trail}} \
-            --policy "${REGO_POLICY_FILENAME}" \
-            --params "${PARAMS}" \
-            --no-assert \
-            --output json > eval-report.json
-          echo "compliant=$(jq --raw-output '.allow' eval-report.json)" >> "${GITHUB_OUTPUT}"
-          jq --argjson params "${PARAMS}" '{params: $params, allow: .allow, violations: .violations}' eval-report.json > eval-evidence.json
-
-      - name: Attest SDLC-CTRL-0002 decision
-        if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
-        run:
-          kosli attest decision
-            --control SDLC-CTRL-0002
-            --compliant=${{ steps.evaluate.outputs.compliant }}
-            --name provenance-decision
-            --fingerprint ${{ env.DIGEST }}
-            --attachments "${REGO_POLICY_FILENAME}"
-            --attachments github-provenance.json
-            --external-url github-attestation=${{ steps.artifact-gh-attest.outputs.attestation-url }}
-            --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
-            --user-data eval-evidence.json
-
-      # Distill the SPDX document into the small rego-friendly facts contract that
-      # SDLC-CTRL-0004-sbom.rego evaluates (rego cannot read the raw SPDX blob).
-      # The distill filter is shared with the repo's rego tests as a single source
-      # of truth; see sbom-facts.jq for the contract and the SPDX handling notes.
-      - name: Distill SBOM facts
-        run: |
-          curl --fail-with-body "${SBOM_FACTS_JQ_URL}" > "${SBOM_FACTS_JQ_FILENAME}"
-          jq --from-file "${SBOM_FACTS_JQ_FILENAME}" sbom.spdx.json > sbom-facts.json
-
-      - name: Attest SBOM facts to Kosli
-        if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
-        run:
-          kosli attest custom
-            --type sbom-facts
-            --name sbom-facts
-            --fingerprint ${{ env.DIGEST }}
-            --attestation-data sbom-facts.json
-
-      - name: Evaluate SBOM against SDLC-CTRL-0004
-        if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
-        id: evaluate-sbom
-        run: |
-          curl --fail-with-body "${SBOM_REGO_POLICY_URL}" > "${SBOM_REGO_POLICY_FILENAME}"
-          # Per-service exceptions allow-list. A missing file means no exceptions,
-          # which is stricter (fail toward non-compliance), so tolerate a 404.
-          if ! curl --fail-with-body "${SBOM_EXCEPTIONS_URL}" > "${SBOM_EXCEPTIONS_FILENAME}"; then
-            echo "no exceptions file for ${{ inputs.kosli_reference_name }}; evaluating with none"
-            echo '{"exceptions": []}' > "${SBOM_EXCEPTIONS_FILENAME}"
-          fi
-
-          PARAMS=$(jq --null-input \
-            --arg an "${{ inputs.kosli_reference_name }}" \
-            --arg now "$(date -u +%Y-%m-%d)" \
-            --slurpfile exc "${SBOM_EXCEPTIONS_FILENAME}" \
-            '{
-              artifact_name:         $an,
-              sbom_attestation_name: "sbom-facts",
-              min_packages:          1,
-              allowed_spec_versions: ["SPDX-2.3"],
-              now:                   $now,
-              exceptions:            ($exc[0].exceptions // [])
-            }')
-
-          kosli evaluate trail ${{inputs.kosli_trail}} \
-            --policy "${SBOM_REGO_POLICY_FILENAME}" \
-            --params "${PARAMS}" \
-            --no-assert \
-            --output json > sbom-eval-report.json
-          echo "compliant=$(jq --raw-output '.allow' sbom-eval-report.json)" >> "${GITHUB_OUTPUT}"
-          jq --argjson params "${PARAMS}" '{params: $params, allow: .allow, violations: .violations}' sbom-eval-report.json > sbom-eval-evidence.json
-
-      - name: Attest SDLC-CTRL-0004 decision
-        if: ${{ inputs.attest_to_kosli == true && (success() || failure()) }}
-        run:
-          kosli attest decision
-            --control SDLC-CTRL-0004
-            --compliant=${{ steps.evaluate-sbom.outputs.compliant }}
-            --name sbom-decision
-            --fingerprint ${{ env.DIGEST }}
-            --attachments sbom.spdx.json
-            --attachments "${SBOM_REGO_POLICY_FILENAME}"
-            --attachments "${SBOM_EXCEPTIONS_FILENAME}"
-            --external-url github-attestation=${{ steps.sbom-gh-attest.outputs.attestation-url }}
-            --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.SBOM_TLOG_INDEX }}
-            --user-data sbom-eval-evidence.json
+          image_name: ${{ inputs.image_name }}
+          image_tag: ${{ inputs.image_tag }}
+          kosli_reference_name: ${{ inputs.kosli_reference_name }}
+          digest: ${{ env.DIGEST }}
+          attest_to_kosli: ${{ inputs.attest_to_kosli }}
+          kosli_cli_version: ${{ inputs.kosli_cli_version }}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Tests for SDLC-CTRL-0002-slsa-provenance.rego and its distill filter
+# Tests for SDLC-CTRL-0002/slsa-provenance.rego and its distill filter
 # provenance-facts.jq.
 #
 # The baseline is a genuine GitHub sigstore attestation bundle:
@@ -11,10 +11,10 @@
 # either the distilled facts or the trail values they are cross-checked against.
 
 readonly my_dir="$(cd "$(dirname "${0}")" && pwd)"
-readonly rego_dir="$(cd "${my_dir}/.." && pwd)"
+readonly repo_dir="$(cd "${my_dir}/.." && pwd)"
 
-readonly REGO="${rego_dir}/SDLC-CTRL-0002-slsa-provenance.rego"
-readonly DISTILL="${rego_dir}/provenance-facts.jq"
+readonly REGO="${repo_dir}/SDLC-CTRL-0002/slsa-provenance.rego"
+readonly DISTILL="${repo_dir}/SDLC-CTRL-0002/provenance-facts.jq"
 readonly FIXTURE="${my_dir}/fixtures/custom-start-points-provenance.json"
 
 # The genuine values in the fixture (used to pin the distill output).

@@ -1,0 +1,43 @@
+name: Run rego tests
+description: >
+  Gate the build on this repo's own rego policy tests. Checks out
+  cyber-dojo/reusable-actions-workflows (the rego policies, their distill
+  filters, and the shunit2 tests) into a sibling path, runs the tests, then
+  removes the checkout. A failing test exits non-zero, which fails the calling
+  job.
+
+# main is checked out deliberately: the eval steps later in the build fetch the
+# policies from raw.githubusercontent.com/.../refs/heads/main, so main's rego is
+# the code that actually runs. The tests need jq (preinstalled on the runner)
+# and the kosli CLI; they call `kosli evaluate input`, which makes no API calls,
+# so no token is required. Run this before the caller's own checkout so the
+# self-checkout does not contend for the workspace root.
+
+inputs:
+  kosli_cli_version:
+    description: The version of the Kosli CLI to setup
+    required: false
+    default: latest
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout reusable-actions-workflows
+      uses: actions/checkout@v6
+      with:
+        repository: cyber-dojo/reusable-actions-workflows
+        ref: main
+        path: reusable-actions-workflows
+
+    - name: Setup Kosli CLI
+      uses: kosli-dev/setup-cli-action@v5
+      with:
+        version: ${{ inputs.kosli_cli_version }}
+
+    - name: Run rego tests
+      shell: bash
+      run: reusable-actions-workflows/tests/run_tests.sh
+
+    - name: Remove test checkout
+      shell: bash
+      run: rm -rf reusable-actions-workflows

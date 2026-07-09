@@ -1,5 +1,5 @@
 {
-  "exceptions": [
+  "overrides": [
     {
       "package": "selenium-manager",
       "check": "purl",
