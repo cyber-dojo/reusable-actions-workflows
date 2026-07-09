@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 
-# Tests for SDLC-CTRL-0002/slsa-provenance.rego and its distill filter
-# provenance-facts.jq.
+# Tests for slsa-provenance.rego and its distill filter provenance-facts.jq,
+# both living in the parent SDLC-CTRL-0002 dir.
 #
 # The baseline is a genuine GitHub sigstore attestation bundle:
-# tests/fixtures/custom-start-points-provenance.json is the real bundle from a
+# fixtures/custom-start-points-provenance.json is the real bundle from a
 # cyber-dojo custom-start-points build. Tests distill it through the SAME
 # provenance-facts.jq the workflow uses, then wrap the facts in a trail and
 # evaluate with `kosli evaluate input` (no API calls). Negative cases mutate
 # either the distilled facts or the trail values they are cross-checked against.
 
 readonly my_dir="$(cd "$(dirname "${0}")" && pwd)"
-readonly repo_dir="$(cd "${my_dir}/.." && pwd)"
+readonly control_dir="$(cd "${my_dir}/.." && pwd)"
 
-readonly REGO="${repo_dir}/SDLC-CTRL-0002/slsa-provenance.rego"
-readonly DISTILL="${repo_dir}/SDLC-CTRL-0002/provenance-facts.jq"
+readonly REGO="${control_dir}/slsa-provenance.rego"
+readonly DISTILL="${control_dir}/provenance-facts.jq"
 readonly FIXTURE="${my_dir}/fixtures/custom-start-points-provenance.json"
 
 # The genuine values in the fixture (used to pin the distill output).

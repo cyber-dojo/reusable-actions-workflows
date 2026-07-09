@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 
-# Tests for SDLC-CTRL-0004/sbom.rego and its distill filter sbom-facts.jq.
+# Tests for sbom.rego and its distill filter sbom-facts.jq, both living in the
+# parent SDLC-CTRL-0004 dir.
 #
-# The baseline is a genuine SBOM: tests/fixtures/creator-sbom.spdx.json is a
-# real syft SPDX slice taken from a cyber-dojo creator-ci build. Tests mutate
-# that real SPDX, distill it through the SAME sbom-facts.jq the workflow uses,
-# and evaluate the result with `kosli evaluate input` (no API calls).
+# The baseline is a genuine SBOM: fixtures/creator-sbom.spdx.json is a real syft
+# SPDX slice taken from a cyber-dojo creator-ci build. Tests mutate that real
+# SPDX, distill it through the SAME sbom-facts.jq the workflow uses, and
+# evaluate the result with `kosli evaluate input` (no API calls).
 #
 # The genuine creator SBOM contains packages that fail the strict per-package
 # checks (no license: .ruby-rundeps, minitest-ci, ruby, selenium-manager; no
@@ -13,12 +14,12 @@
 # so the policy is only compliant on the real SBOM when those overrides apply.
 
 readonly my_dir="$(cd "$(dirname "${0}")" && pwd)"
-readonly repo_dir="$(cd "${my_dir}/.." && pwd)"
+readonly control_dir="$(cd "${my_dir}/.." && pwd)"
 
-readonly REGO="${repo_dir}/SDLC-CTRL-0004/sbom.rego"
-readonly DISTILL="${repo_dir}/SDLC-CTRL-0004/sbom-facts.jq"
+readonly REGO="${control_dir}/sbom.rego"
+readonly DISTILL="${control_dir}/sbom-facts.jq"
 readonly FIXTURE="${my_dir}/fixtures/creator-sbom.spdx.json"
-readonly CREATOR_OVERRIDES="${repo_dir}/SDLC-CTRL-0004/sbom-overrides.creator.json"
+readonly CREATOR_OVERRIDES="${control_dir}/sbom-overrides.creator.json"
 
 # An evaluation date on which the example overrides (expires 2027-01-08) are active.
 readonly NOW="2026-07-08"
