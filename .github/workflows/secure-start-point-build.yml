@@ -102,8 +102,37 @@ env:
 
 jobs:
 
+  # Gate the build on this repo's own rego policy tests. Runs before secure-build
+  # (which needs: it), so a broken policy fails here before any image is built or
+  # pushed. The tests need jq (preinstalled) and the kosli CLI; they call
+  # `kosli evaluate input`, which makes no API calls, so no token is required.
+  test-policies:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout reusable-actions-workflows
+        uses: actions/checkout@v6
+        with:
+          repository: cyber-dojo/reusable-actions-workflows
+          ref: main
+
+      - name: Setup Kosli CLI
+        uses: kosli-dev/setup-cli-action@v5
+        with:
+          version: ${{ inputs.kosli_cli_version }}
+
+      - name: Run rego policy tests
+        shell: bash
+        run: tests/run_tests.sh
+
   secure-build:
-    needs: []
+    needs: test-policies
     runs-on: ubuntu-latest
     outputs:
       digest: ${{ steps.sanitize-digest.outputs.digest }}
@@ -118,11 +147,6 @@ jobs:
         uses: step-security/harden-runner@v2
         with:
           egress-policy: audit
-
-      - name: Run rego policy tests as a build gate
-        uses: cyber-dojo/reusable-actions-workflows/.github/actions/run-rego-tests@main
-        with:
-          kosli_cli_version: ${{ inputs.kosli_cli_version }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
