@@ -152,7 +152,7 @@ runs:
       run:
         kosli attest decision
           --control SDLC-CTRL-0002
-          --compliant=${{ steps.evaluate.outputs.compliant }}
+          --compliant ${{ steps.evaluate.outputs.compliant }}
           --name provenance-decision
           --fingerprint ${{ inputs.digest }}
           --attachments "${PROV_REGO_POLICY_FILENAME}"
