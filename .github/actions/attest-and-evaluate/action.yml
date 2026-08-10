@@ -252,7 +252,21 @@ runs:
       if: ${{ success() || failure() }}
       shell: bash
       run: |
-        TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' ${{ steps.sbom-gh-attest.outputs.bundle-path }})
+        # This step runs even when the attestation failed, so say what actually
+        # went wrong. Without these guards a failed attestation surfaces here as
+        # a bare 'jq: Could not open file ... exit code 2', which names neither
+        # the attest step nor the transparency log it could not reach.
+        bundle="${{ steps.sbom-gh-attest.outputs.bundle-path }}"
+        outcome="${{ steps.sbom-gh-attest.outcome }}"
+        if [ ! -f "${bundle}" ]; then
+          echo "::error::No sigstore bundle at '${bundle}', so the SBOM was never recorded in the sigstore transparency log. The 'Attest SBOM to Github' step outcome was '${outcome}'; a (502) Bad Gateway creating the tlog entry is the usual transient cause, in which case re-running the job is enough."
+          exit 1
+        fi
+        TRANSPARENCY_LOG_INDEX=$(jq '.verificationMaterial.tlogEntries[0].logIndex' "${bundle}")
+        if [ -z "${TRANSPARENCY_LOG_INDEX}" ] || [ "${TRANSPARENCY_LOG_INDEX}" = 'null' ]; then
+          echo "::error::Sigstore bundle '${bundle}' carries no verificationMaterial.tlogEntries[0].logIndex, so there is no transparency log index to attest. The 'Attest SBOM to Github' step outcome was '${outcome}'."
+          exit 1
+        fi
         echo "SBOM_TLOG_INDEX=${TRANSPARENCY_LOG_INDEX}" >> ${GITHUB_ENV}
 
     - name: Attest SDLC-CTRL-0004 decision
