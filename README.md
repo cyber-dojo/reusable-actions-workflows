@@ -106,13 +106,17 @@ The whole repo is checked out, so the service directory is available as the
 build context. Give each service its own distinct `image_name`, `kosli_flow`
 and `kosli_reference_name` so their attestations stay separate.
 
+When several services share one multi-stage `Dockerfile`, select each one's
+stage with the optional `target` input, eg `target: web`. Left unset, the
+build produces the Dockerfile's last stage.
+
 ## Start-point builds
 
 `secure-start-point-build.yml` is for cyber-dojo start-point images, which are
 built by the caller's `make image` (running `cyber-dojo start-point create`)
 rather than from a `Dockerfile`. It takes the same `checkout_*`, `image_*`,
-`kosli_*` and `attest_to_kosli` inputs, but not `build_context`, `dockerfile`
-or `image_build_args`. Its one extra input is the optional `local_image_name`,
+`kosli_*` and `attest_to_kosli` inputs, but not `build_context`, `dockerfile`,
+`target` or `image_build_args`. Its one extra input is the optional `local_image_name`,
 the tag `make image` produces locally before it is retagged to `image_name`
 (defaults to `cyberdojo/<kosli_reference_name>`).
 
