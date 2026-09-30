@@ -112,11 +112,23 @@ runs:
           --fingerprint ${{ inputs.digest }}
           --attestation-data provenance-facts.json
 
+    # SDLC-CTRL-0002/slsa-provenance.rego never reads the external_urls key.
+    # kosli evaluate policy has no --external-url flag.
+    # The decision it records includes these params.
+    # So this key is how the decision carries the GitHub and sigstore links.
     - name: Prepare provenance evaluation params
       if: ${{ inputs.attest_to_kosli == 'true' && (success() || failure()) }}
       shell: bash
       run: |
-        jq --null-input --arg an "${{ inputs.kosli_reference_name }}" '{
+        jq --null-input \
+          --arg an "${{ inputs.kosli_reference_name }}" \
+          --arg gh "${{ steps.artifact-gh-attest.outputs.attestation-url }}" \
+          --arg sig "https://search.sigstore.dev/?logIndex=${ARTIFACT_TLOG_INDEX}" \
+          '{
+          external_urls: {
+            "github-attestation": $gh,
+            "github-sigstore":    $sig
+          },
           artifact_name:               $an,
           provenance_attestation_name: "provenance-facts",
           allowed_predicate_types:     ["https://slsa.dev/provenance/v1"],
@@ -125,41 +137,20 @@ runs:
           expected_source_repo_prefix: "https://github.com/cyber-dojo/"
         }' > provenance-eval-params.json
 
-    - name: Evaluate
-      if: ${{ inputs.attest_to_kosli == 'true' && (success() || failure()) }}
-      id: evaluate
-      shell: bash
-      run: |
-        kosli evaluate trail ${KOSLI_TRAIL} \
-          --policy "${PROV_REGO_POLICY_FILENAME}" \
-          --params "$(cat provenance-eval-params.json)" \
-          --no-assert \
-          --output json > provenance-eval-report.json
-        echo "compliant=$(jq --raw-output '.allow' provenance-eval-report.json)" >> "${GITHUB_OUTPUT}"
-
-    - name: Create provenance-eval-evidence.json
-      if: ${{ inputs.attest_to_kosli == 'true' && (success() || failure()) }}
-      env:
-        JQ_FILTER: '{params: $params, allow: .allow, violations: .violations}'
-      shell: bash
-      run: |
-        params="$(cat provenance-eval-params.json)"
-        jq --argjson params "${params}" "${JQ_FILTER}" provenance-eval-report.json > provenance-eval-evidence.json
-
-    - name: Attest SDLC-CTRL-0002 decision
+    # Evaluated where the trail is stored, and the decision recorded in the same
+    # request, so the compliant value never passes through this workflow. The
+    # decision carries the params, the result and the policy as a bundle.
+    - name: Evaluate SDLC-CTRL-0002 and record its decision
       if: ${{ inputs.attest_to_kosli == 'true' && (success() || failure()) }}
       shell: bash
       run:
-        kosli attest decision
+        kosli evaluate policy
+          --context "trail=${KOSLI_FLOW}/${KOSLI_TRAIL}"
+          --policy "${PROV_REGO_POLICY_FILENAME}"
+          --params @provenance-eval-params.json
           --control SDLC-CTRL-0002
-          --compliant ${{ steps.evaluate.outputs.compliant }}
           --name provenance-decision
           --fingerprint ${{ inputs.digest }}
-          --attachments "${PROV_REGO_POLICY_FILENAME}"
-          --attachments github-provenance.json
-          --external-url github-attestation=${{ steps.artifact-gh-attest.outputs.attestation-url }}
-          --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.ARTIFACT_TLOG_INDEX }}
-          --user-data provenance-eval-evidence.json
 
     # The SBOM policy, its distill filter, and the per-service overrides
     # allow-list, as paths into the checkout above. Set here, just before the
@@ -194,51 +185,6 @@ runs:
           --fingerprint ${{ inputs.digest }}
           --attestation-data sbom-facts.json
 
-    - name: Prepare SBOM evaluation params
-      if: ${{ inputs.attest_to_kosli == 'true' && (success() || failure()) }}
-      shell: bash
-      run: |
-        # Per-service overrides allow-list. A missing file means no overrides,
-        # which is stricter (fail toward non-compliance), so tolerate its absence.
-        if [ ! -f "${SBOM_OVERRIDES_FILENAME}" ]; then
-          echo "no overrides file for ${{ inputs.kosli_reference_name }}; evaluating with none"
-          echo '{"overrides": []}' > "${SBOM_OVERRIDES_FILENAME}"
-        fi
-
-        jq --null-input \
-          --arg an "${{ inputs.kosli_reference_name }}" \
-          --arg now "$(date -u +%Y-%m-%d)" \
-          --slurpfile ovr "${SBOM_OVERRIDES_FILENAME}" \
-          '{
-            artifact_name:         $an,
-            sbom_attestation_name: "sbom-facts",
-            min_packages:          1,
-            allowed_spec_versions: ["SPDX-2.3"],
-            now:                   $now,
-            overrides:            ($ovr[0].overrides // [])
-          }' > sbom-eval-params.json
-
-    - name: Evaluate SBOM against SDLC-CTRL-0004
-      if: ${{ inputs.attest_to_kosli == 'true' && (success() || failure()) }}
-      id: evaluate-sbom
-      shell: bash
-      run: |
-        kosli evaluate trail ${KOSLI_TRAIL} \
-          --policy "${SBOM_REGO_POLICY_FILENAME}" \
-          --params "$(cat sbom-eval-params.json)" \
-          --no-assert \
-          --output json > sbom-eval-report.json
-        echo "compliant=$(jq --raw-output '.allow' sbom-eval-report.json)" >> "${GITHUB_OUTPUT}"
-
-    - name: Create sbom-eval-evidence.json
-      if: ${{ inputs.attest_to_kosli == 'true' && (success() || failure()) }}
-      env:
-        JQ_FILTER: '{params: $params, allow: .allow, violations: .violations}'
-      shell: bash
-      run: |
-        params="$(cat sbom-eval-params.json)"
-        jq --argjson params "${params}" "${JQ_FILTER}" sbom-eval-report.json > sbom-eval-evidence.json
-
     - name: Attest SBOM to Github
       if: ${{ success() || failure() }}
       id: sbom-gh-attest
@@ -269,18 +215,51 @@ runs:
         fi
         echo "SBOM_TLOG_INDEX=${TRANSPARENCY_LOG_INDEX}" >> ${GITHUB_ENV}
 
-    - name: Attest SDLC-CTRL-0004 decision
+    # This step runs after the SBOM GitHub attestation because the params
+    # include its links.
+    # SDLC-CTRL-0004/sbom.rego never reads the external_urls key.
+    # kosli evaluate policy has no --external-url flag.
+    # The decision it records includes these params.
+    # So this key is how the decision carries the GitHub and sigstore links.
+    - name: Prepare SBOM evaluation params
+      if: ${{ inputs.attest_to_kosli == 'true' && (success() || failure()) }}
+      shell: bash
+      run: |
+        # Per-service overrides allow-list. A missing file means no overrides,
+        # which is stricter (fail toward non-compliance), so tolerate its absence.
+        if [ ! -f "${SBOM_OVERRIDES_FILENAME}" ]; then
+          echo "no overrides file for ${{ inputs.kosli_reference_name }}; evaluating with none"
+          echo '{"overrides": []}' > "${SBOM_OVERRIDES_FILENAME}"
+        fi
+
+        jq --null-input \
+          --arg an "${{ inputs.kosli_reference_name }}" \
+          --arg now "$(date -u +%Y-%m-%d)" \
+          --arg gh "${{ steps.sbom-gh-attest.outputs.attestation-url }}" \
+          --arg sig "https://search.sigstore.dev/?logIndex=${SBOM_TLOG_INDEX}" \
+          --slurpfile ovr "${SBOM_OVERRIDES_FILENAME}" \
+          '{
+            external_urls: {
+              "github-attestation": $gh,
+              "github-sigstore":    $sig
+            },
+            artifact_name:         $an,
+            sbom_attestation_name: "sbom-facts",
+            min_packages:          1,
+            allowed_spec_versions: ["SPDX-2.3"],
+            now:                   $now,
+            overrides:            ($ovr[0].overrides // [])
+          }' > sbom-eval-params.json
+
+    # The overrides allow-list reaches the decision inside the params.
+    - name: Evaluate SDLC-CTRL-0004 and record its decision
       if: ${{ inputs.attest_to_kosli == 'true' && (success() || failure()) }}
       shell: bash
       run:
-        kosli attest decision
+        kosli evaluate policy
+          --context "trail=${KOSLI_FLOW}/${KOSLI_TRAIL}"
+          --policy "${SBOM_REGO_POLICY_FILENAME}"
+          --params @sbom-eval-params.json
           --control SDLC-CTRL-0004
-          --compliant=${{ steps.evaluate-sbom.outputs.compliant }}
           --name sbom-decision
           --fingerprint ${{ inputs.digest }}
-          --attachments sbom.spdx.json
-          --attachments "${SBOM_REGO_POLICY_FILENAME}"
-          --attachments "${SBOM_OVERRIDES_FILENAME}"
-          --external-url github-attestation=${{ steps.sbom-gh-attest.outputs.attestation-url }}
-          --external-url github-sigstore=https://search.sigstore.dev/?logIndex=${{ env.SBOM_TLOG_INDEX }}
-          --user-data sbom-eval-evidence.json

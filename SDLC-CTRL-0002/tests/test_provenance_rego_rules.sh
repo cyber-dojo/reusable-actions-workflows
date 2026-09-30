@@ -22,6 +22,14 @@ readonly REAL_SUBJECT_DIGEST="dd604131d80f7e188c94472211eb4859c2d50568b46dca3c08
 readonly REAL_SOURCE_COMMIT="fa54f696648b78ac710d6f7e2357139eb9c3c89b"
 readonly REAL_SOURCE_REPO="https://github.com/cyber-dojo/custom-start-points"
 
+# A different genuine custom-start-points commit, for an artifact recorded
+# against a commit other than the one the builder attested.
+readonly OTHER_SOURCE_COMMIT="7dea378dc49b23ed66cd5a57e74060d90bc0a349"
+
+# A genuine cyber-dojo saver image digest, for an artifact whose fingerprint is
+# not the image the provenance is about.
+readonly OTHER_SUBJECT_DIGEST="9cfef3281fc531a3c5a5a00ed8a67256e1b954b5271b03936808623960afebfc"
+
 readonly PARAMS='{
   "artifact_name": "custom-start-points",
   "provenance_attestation_name": "provenance-facts",
@@ -38,7 +46,9 @@ distill()
 }
 
 # Wrap provenance facts in the trail input shape the policy expects, with the
-# given artifact fingerprint and trail commit (the values the rego cross-checks).
+# given artifact fingerprint and artifact commit (the values the rego
+# cross-checks). The commit sits on the artifact entry, where the server-side
+# trail moment carries it.
 wrap()
 {
   jq -n \
@@ -48,11 +58,11 @@ wrap()
     '{
       trail: {
         name: "test-trail",
-        git_commit_info: {sha1: $commit},
         compliance_status: {
           artifacts_statuses: {
             "custom-start-points": {
               artifact_fingerprint: $fingerprint,
+              git_commit_info: {sha1: $commit},
               attestations_statuses: {"provenance-facts": {attestation_data: $facts}}
             }
           }
@@ -111,7 +121,10 @@ test_allow_when_subject_and_source_match_the_trail()
 
 test_deny_when_provenance_facts_attestation_missing()
 {
-  evaluate_input "$(jq -n '{trail: {name: "t", git_commit_info: {sha1: "abc"}, compliance_status: {artifacts_statuses: {"custom-start-points": {artifact_fingerprint: "abc", attestations_statuses: {}}}}}}')"
+  evaluate_input "$(jq -n \
+    --arg fingerprint "${REAL_SUBJECT_DIGEST}" \
+    --arg commit "${REAL_SOURCE_COMMIT}" \
+    '{trail: {name: "t", compliance_status: {artifacts_statuses: {"custom-start-points": {artifact_fingerprint: $fingerprint, git_commit_info: {sha1: $commit}, attestations_statuses: {}}}}}}')"
   assert_deny
   assert_violation_message "no 'provenance-facts' provenance-facts attestation found under artifact 'custom-start-points' -- SLSA provenance was not attested as structured data"
 }
@@ -119,17 +132,17 @@ test_deny_when_provenance_facts_attestation_missing()
 test_deny_when_subject_digest_does_not_match_the_fingerprint()
 {
   local -r f="$(distill)"
-  evaluate_input "$(wrap "${f}" "deadbeef" "${REAL_SOURCE_COMMIT}")"
+  evaluate_input "$(wrap "${f}" "${OTHER_SUBJECT_DIGEST}" "${REAL_SOURCE_COMMIT}")"
   assert_deny
-  assert_violation_message "provenance subject digest '${REAL_SUBJECT_DIGEST}' does not match the artifact fingerprint 'deadbeef'"
+  assert_violation_message "provenance subject digest '${REAL_SUBJECT_DIGEST}' does not match the artifact fingerprint '${OTHER_SUBJECT_DIGEST}'"
 }
 
-test_deny_when_source_commit_does_not_match_the_trail_commit()
+test_deny_when_source_commit_does_not_match_the_artifact_commit()
 {
   local -r f="$(distill)"
-  evaluate_input "$(wrap "${f}" "${REAL_SUBJECT_DIGEST}" "0000000000000000000000000000000000000000")"
+  evaluate_input "$(wrap "${f}" "${REAL_SUBJECT_DIGEST}" "${OTHER_SOURCE_COMMIT}")"
   assert_deny
-  assert_violation_message "provenance source commit '${REAL_SOURCE_COMMIT}' does not match the trail commit '0000000000000000000000000000000000000000'"
+  assert_violation_message "provenance source commit '${REAL_SOURCE_COMMIT}' does not match the artifact commit '${OTHER_SOURCE_COMMIT}'"
 }
 
 test_deny_when_facts_and_trail_are_both_blank_do_not_falsely_match()
@@ -140,7 +153,7 @@ test_deny_when_facts_and_trail_are_both_blank_do_not_falsely_match()
   evaluate_input "$(wrap "${f}" "" "")"
   assert_deny
   assert_violation_message "provenance subject digest '' does not match the artifact fingerprint ''"
-  assert_violation_message "provenance source commit '' does not match the trail commit ''"
+  assert_violation_message "provenance source commit '' does not match the artifact commit ''"
 }
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

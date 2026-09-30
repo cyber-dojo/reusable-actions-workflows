@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "sbom-overrides.schema.json",
   "title": "SDLC-CTRL-0004 SBOM per-service overrides allow-list",
-  "description": "Per-service override for sbom.rego. Each entry waives specific per-package checks for one package in that service's SBOM. Waivers are additive: a missing, malformed, or expired entry waives nothing, so the policy fails toward non-compliance. Passed to `kosli evaluate trail` merged into --params as data.params.overrides. One file per service, named sbom-overrides.<service>.json, stored alongside the rego.",
+  "description": "Per-service override for sbom.rego. Each entry waives specific per-package checks for one package in that service's SBOM. Waivers are additive: a missing, malformed, or expired entry waives nothing, so the policy fails toward non-compliance. Passed to `kosli evaluate policy` merged into --params as data.params.overrides. One file per service, named sbom-overrides.<service>.json, stored alongside the rego.",
   "type": "object",
   "additionalProperties": false,
   "required": ["overrides"],

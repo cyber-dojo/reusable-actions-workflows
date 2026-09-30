@@ -15,15 +15,17 @@ import rego.v1
 # attestation by provenance-facts.jq. It verifies, against the builder's own
 # signed statement:
 #   known identity  -> the provenance subject digest IS this artifact's fingerprint
-#   known source    -> the builder-attested source commit IS the trail's commit,
+#   known source    -> the builder-attested source commit IS the commit Kosli
+#                       recorded for this artifact,
 #                       from an expected cyber-dojo repository
 #   known builder   -> built by a trusted cyber-dojo reusable workflow, with the
 #                       expected SLSA build type and predicate type
 #
 # WHAT THIS POLICY READS
 # ----------------------
-# kosli evaluate trail exposes only the trail JSON as input.trail. The workflow
-# distils the GitHub sigstore bundle into the attestation_data contract below and
+# kosli evaluate policy runs this policy on the Kosli server, with the trail's
+# moment as input.trail. Each artifact entry in it carries that artifact's
+# fingerprint and git_commit_info. The workflow distils the GitHub sigstore bundle into the attestation_data contract below and
 # attests it with
 #   kosli attest custom --type provenance-facts --name <name> --fingerprint <digest>
 # BEFORE this policy runs. This policy holds the checks; the jq only reshapes.
@@ -42,10 +44,10 @@ import rego.v1
 #   "invocation_id":     "https://github.com/cyber-dojo/<repo>/actions/runs/<id>/attempts/<n>"
 # }
 #
-# VERIFY THE INPUT PATH with `kosli evaluate trail ... --show-input` before
-# trusting this policy; adjust the single `prov` line if it lands elsewhere.
+# The server does not return the input it evaluated. The input paths are pinned
+# by tests/test_provenance_rego_rules.sh, which builds that input shape.
 #
-# PARAMS (kosli evaluate trail --params '{...}')
+# PARAMS (kosli evaluate policy --params @file.json)
 #   artifact_name             template reference name of the artifact (eg "nginx")
 #   provenance_attestation_name  --name of the provenance-facts attestation (eg "provenance-facts")
 #   allowed_predicate_types   allowed SLSA predicate types (eg ["https://slsa.dev/provenance/v1"])
@@ -81,13 +83,13 @@ allowed_build_types := {v | some v in data.params.allowed_build_types}
 # ---------------------------------------------------------------------------
 # Single source of truth for where the provenance facts and the values they are
 # cross-checked against live in the trail input. Adjust ONLY these lines if
-# --show-input reveals a different path.
+# the shape of the trail moment changes.
 # ---------------------------------------------------------------------------
 prov := input.trail.compliance_status.artifacts_statuses[artifact_name].attestations_statuses[provenance_attestation_name].attestation_data
 
 artifact_fingerprint := input.trail.compliance_status.artifacts_statuses[artifact_name].artifact_fingerprint
 
-trail_commit := input.trail.git_commit_info.sha1
+artifact_commit := input.trail.compliance_status.artifacts_statuses[artifact_name].git_commit_info.sha1
 
 # ---------------------------------------------------------------------------
 # allow is driven by positive assertions (every condition must hold), never by
@@ -101,7 +103,7 @@ allow if {
 	builder_trusted
 	source_repo_trusted
 	subject_matches_artifact
-	source_commit_matches_trail
+	source_commit_matches_artifact
 }
 
 # ---------------------------------------------------------------------------
@@ -146,8 +148,8 @@ source_repo_trusted if has_prefix(prov.source_repo, expected_source_repo_prefix)
 # known identity: the provenance subject digest is this artifact's fingerprint.
 subject_matches_artifact if digests_equal(prov.subject_digest, artifact_fingerprint)
 
-# known source: the builder-attested source commit is the trail's commit.
-source_commit_matches_trail if digests_equal(prov.source_git_commit, trail_commit)
+# known source: the builder-attested source commit is the artifact's commit.
+source_commit_matches_artifact if digests_equal(prov.source_git_commit, artifact_commit)
 
 # ---------------------------------------------------------------------------
 # Violations (diagnostics only; they do not drive allow)
@@ -182,9 +184,9 @@ violations contains sprintf("provenance subject digest '%v' does not match the a
 	not subject_matches_artifact
 }
 
-violations contains sprintf("provenance source commit '%v' does not match the trail commit '%v'", [object.get(prov, "source_git_commit", "<missing>"), object.get(input.trail.git_commit_info, "sha1", "<missing>")]) if {
+violations contains sprintf("provenance source commit '%v' does not match the artifact commit '%v'", [object.get(prov, "source_git_commit", "<missing>"), object.get(object.get(input.trail.compliance_status.artifacts_statuses[artifact_name], "git_commit_info", {}), "sha1", "<missing>")]) if {
 	provenance_present
-	not source_commit_matches_trail
+	not source_commit_matches_artifact
 }
 
 # ---------------------------------------------------------------------------
