@@ -23,8 +23,8 @@ import rego.v1
 #
 # WHAT THIS POLICY READS
 # ----------------------
-# kosli evaluate trail exposes only the trail JSON as input.trail. It does NOT
-# expose raw attestation attachments (the raw sbom.spdx.json blob is invisible
+# kosli evaluate policy runs this policy on the Kosli server, with the trail's
+# moment as input.trail. It does NOT expose raw attestation attachments (the raw sbom.spdx.json blob is invisible
 # to rego). It DOES expose structured data attested via
 #   kosli attest custom --type <schema> --attestation-data <file> --name <name> --fingerprint <digest>
 # under input.trail...attestations_statuses[<name>].attestation_data.
@@ -50,13 +50,11 @@ import rego.v1
 #   ]
 # }
 #
-# VERIFY THE INPUT PATH before trusting this policy. Per the Kosli docs, dump the
-# real trail shape and confirm the artifacts_statuses / attestations_statuses path:
-#   kosli evaluate trail "$KOSLI_TRAIL" --policy allow-all.rego \
-#     --show-input --output json | jq '.input.trail.compliance_status'
+# The server does not return the input it evaluated. The input path is pinned
+# by tests/test_sbom_rego_rules.sh, which builds that input shape.
 # If the SBOM facts attestation lands elsewhere, adjust the single `sbom` line below.
 #
-# PARAMS (kosli evaluate trail --params '{...}')
+# PARAMS (kosli evaluate policy --params @file.json)
 #   artifact_name          template reference name of the artifact (eg "saver")
 #   sbom_attestation_name  --name of the custom SBOM-facts attestation (eg "sbom-facts")
 #   min_packages           minimum package count for a non-empty inventory (eg 1)
@@ -95,7 +93,7 @@ allowed_spec_versions := {v | some v in data.params.allowed_spec_versions}
 
 # ---------------------------------------------------------------------------
 # Single source of truth for where the SBOM facts live in the trail input.
-# Adjust ONLY this line if --show-input reveals a different path.
+# Adjust ONLY this line if the shape of the trail moment changes.
 # ---------------------------------------------------------------------------
 sbom := input.trail.compliance_status.artifacts_statuses[artifact_name].attestations_statuses[sbom_attestation_name].attestation_data
 
