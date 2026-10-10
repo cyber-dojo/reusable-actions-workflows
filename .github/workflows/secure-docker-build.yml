@@ -280,6 +280,14 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      # kosli attest artifact reads the commit from the git repo in the working
+      # directory. Before any file this job writes, as checkout cleans it.
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.checkout_repository }}
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: ${{ inputs.checkout_fetch_depth }}
+
       # Empty when the caller passed no Docker Hub credentials, which leaves the
       # login below skipped and the index tagged in ECR alone.
       - name: Docker Hub tag
