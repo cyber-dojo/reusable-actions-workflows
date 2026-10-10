@@ -5,10 +5,10 @@ on:
     outputs:
       digest:
         description: The SHA256 image digest
-        value: ${{ jobs.secure-build.outputs.digest }}
+        value: ${{ jobs.create-index.outputs.digest }}
       tagged_image_name:
         description: "eg 244531986313.dkr.ecr.eu-central-1.amazonaws.com/differ:52ec808"
-        value: ${{ jobs.secure-build.outputs.tagged_image_name }}
+        value: ${{ jobs.create-index.outputs.tagged_image_name }}
 
     inputs:
       # inputs for actions/checkout@v6
@@ -111,8 +111,8 @@ env:
 
 jobs:
 
-  # Gate the build on this repo's own rego policy tests. Runs before secure-build
-  # (which needs: it), so a broken policy fails here before any image is built or
+  # Gate the build on this repo's own rego policy tests. Runs before the build
+  # jobs (which need it), so a broken policy fails here before any image is built or
   # pushed. The tests need jq (preinstalled) and the kosli CLI; they call
   # `kosli evaluate input`, which makes no API calls, so no token is required.
   test-policies:
@@ -140,11 +140,120 @@ jobs:
         shell: bash
         run: make test-provenance test-sbom
 
-  secure-build:
+  # Each platform is built on a runner of that platform, so nothing is emulated,
+  # and pushed to ECR by digest alone, with its own provenance and SBOM.
+  # create-index then names those digests in one index under the real tags.
+  # The two build jobs differ only in runs-on, the platform, and the if.
+  build-amd64:
     needs: test-policies
     runs-on: ubuntu-latest
     outputs:
-      digest: ${{ steps.sanitize-digest.outputs.digest }}
+      digest: ${{ steps.docker_build.outputs.digest }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/gh_actions_services
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 2400
+          role-session-name: ${{ github.event.repository.name }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.checkout_repository }}
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: ${{ inputs.checkout_fetch_depth }}
+
+      - name: Build and push the linux/amd64 image by digest
+        id: docker_build
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ inputs.build_context }}
+          file: ${{ inputs.dockerfile }}
+          target: ${{ inputs.target }}
+          platforms: linux/amd64
+          no-cache: true
+          outputs: type=image,name=${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=true
+          build-args: ${{ inputs.image_build_args }}
+          provenance: mode=max
+          sbom: true
+
+  build-arm64:
+    needs: test-policies
+    if: ${{ contains(inputs.platforms, 'linux/arm64') }}
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      digest: ${{ steps.docker_build.outputs.digest }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/gh_actions_services
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 2400
+          role-session-name: ${{ github.event.repository.name }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.checkout_repository }}
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: ${{ inputs.checkout_fetch_depth }}
+
+      - name: Build and push the linux/arm64 image by digest
+        id: docker_build
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ inputs.build_context }}
+          file: ${{ inputs.dockerfile }}
+          target: ${{ inputs.target }}
+          platforms: linux/arm64
+          no-cache: true
+          outputs: type=image,name=${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=true
+          build-args: ${{ inputs.image_build_args }}
+          provenance: mode=max
+          sbom: true
+
+  # Runs only if every platform asked for built and pushed, so a failure on any
+  # one publishes no tag at all. The condition is spelled out because
+  # build-arm64 is skipped when only linux/amd64 is asked for, and a skipped
+  # dependency would otherwise skip this job too.
+  create-index:
+    needs: [build-amd64, build-arm64]
+    if: >-
+      always() &&
+      needs.build-amd64.result == 'success' &&
+      (!contains(inputs.platforms, 'linux/arm64') || needs.build-arm64.result == 'success')
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.create-index.outputs.digest }}
       tagged_image_name: ${{ inputs.image_name }}:${{ inputs.image_tag }}
     permissions:
       id-token: write
@@ -165,20 +274,14 @@ jobs:
           role-duration-seconds: 2400
           role-session-name: ${{ github.event.repository.name }}
 
-      # The runner is amd64, so an arm64 build runs under QEMU emulation.
-      - name: Set up QEMU
-        if: ${{ contains(inputs.platforms, 'linux/arm64') }}
-        uses: docker/setup-qemu-action@v4
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
       - name: Login to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       # Empty when the caller passed no Docker Hub credentials, which leaves the
-      # login below skipped and the build pushing to ECR alone.
+      # login below skipped and the index tagged in ECR alone.
       - name: Docker Hub tag
         id: dockerhub
         env:
@@ -197,37 +300,31 @@ jobs:
           username: ${{ secrets.docker_user }}
           password: ${{ secrets.docker_pass }}
 
-      - uses: actions/checkout@v6
-        with:
-          repository: ${{ inputs.checkout_repository }}
-          ref: ${{ inputs.checkout_ref }}
-          fetch-depth: ${{ inputs.checkout_fetch_depth }}
-
-      # One build, pushed under every tag, so ECR and Docker Hub hold the same
-      # manifest bytes and so the same digest. An empty Docker Hub tag is ignored.
-      - name: Build and push Docker image
-        id: docker_build
-        uses: docker/build-push-action@v7
-        with:
-          context: ${{ inputs.build_context }}
-          file: ${{ inputs.dockerfile }}
-          target: ${{ inputs.target }}
-          platforms: ${{ inputs.platforms }}
-          no-cache: true
-          push: true
-          tags: |
-            ${{ inputs.image_name }}:${{ inputs.image_tag }}
-            ${{ steps.dockerhub.outputs.tag }}
-          build-args: ${{ inputs.image_build_args }}
-          provenance: mode=max
-          sbom: true
-
-      - name: Sanitize digest
-        id: sanitize-digest
+      # One index, written under every tag, so ECR and Docker Hub hold the same
+      # bytes and so the same digest. imagetools copies the blobs Docker Hub
+      # lacks from ECR itself. Each platform's attestation manifest comes along.
+      - name: Create the multi-platform index
+        id: create-index
+        env:
+          IMAGE_NAME: ${{ inputs.image_name }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          DOCKERHUB_TAG: ${{ steps.dockerhub.outputs.tag }}
+          AMD64_DIGEST: ${{ needs.build-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-arm64.outputs.digest }}
         run: |
-          DIGEST=$(echo ${{ steps.docker_build.outputs.digest }} | sed 's/^sha256://')
-          echo "DIGEST=${DIGEST}" >> ${GITHUB_ENV}
-          echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
+          TAGS=(--tag "${IMAGE_NAME}:${IMAGE_TAG}")
+          if [ -n "${DOCKERHUB_TAG}" ]; then
+            TAGS+=(--tag "${DOCKERHUB_TAG}")
+          fi
+          REFS=("${IMAGE_NAME}@${AMD64_DIGEST}")
+          if [ -n "${ARM64_DIGEST}" ]; then
+            REFS+=("${IMAGE_NAME}@${ARM64_DIGEST}")
+          fi
+          docker buildx imagetools create "${TAGS[@]}" "${REFS[@]}"
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE_NAME}:${IMAGE_TAG}" \
+                     --format '{{ json .Manifest }}' | jq -r .digest | sed 's/^sha256://')
+          echo "DIGEST=${DIGEST}" >> "${GITHUB_ENV}"
+          echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
 
       - name: Save Docker image ready to upload
         run: |          
@@ -251,7 +348,7 @@ jobs:
           else
             FORMAT='{{ json .SBOM.SPDX }}'
           fi
-          docker buildx imagetools inspect ${{ inputs.image_name }}@${{ steps.docker_build.outputs.digest }} \
+          docker buildx imagetools inspect "${{ inputs.image_name }}@sha256:${DIGEST}" \
             --format "${FORMAT}" > sbom.spdx.json
 
       # Attest the image and SBOM to GitHub and Kosli, distill provenance and
