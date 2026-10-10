@@ -18,10 +18,10 @@ on:
     outputs:
       digest:
         description: The SHA256 image digest
-        value: ${{ jobs.secure-build.outputs.digest }}
+        value: ${{ jobs.create-index.outputs.digest }}
       tagged_image_name:
         description: "eg 244531986313.dkr.ecr.eu-central-1.amazonaws.com/custom-start-points:52ec808"
-        value: ${{ jobs.secure-build.outputs.tagged_image_name }}
+        value: ${{ jobs.create-index.outputs.tagged_image_name }}
 
     inputs:
       # inputs for actions/checkout@v6
@@ -46,6 +46,10 @@ on:
         required: false
         type: string        # the tag `make image` produces locally, before it is
         default: ""         # retagged to image_name (defaults to cyberdojo/<kosli_reference_name>)
+      platforms:
+        required: false
+        type: string        # eg linux/amd64,linux/arm64
+        default: linux/amd64
 
       # inputs for Kosli CLI commands
       kosli_flow:
@@ -86,6 +90,12 @@ on:
     secrets:
       kosli_api_token:
         required: true
+      # When both are passed, the index is also tagged on Docker Hub as
+      # cyberdojo/<last part of image_name>:<image_tag>, with the same digest.
+      docker_user:
+        required: false
+      docker_pass:
+        required: false
 
 
 env:
@@ -102,8 +112,8 @@ env:
 
 jobs:
 
-  # Gate the build on this repo's own rego policy tests. Runs before secure-build
-  # (which needs: it), so a broken policy fails here before any image is built or
+  # Gate the build on this repo's own rego policy tests. Runs before the build
+  # jobs (which need it), so a broken policy fails here before any image is built or
   # pushed. The tests need jq (preinstalled) and the kosli CLI; they call
   # `kosli evaluate input`, which makes no API calls, so no token is required.
   test-policies:
@@ -131,11 +141,121 @@ jobs:
         shell: bash
         run: make test-provenance test-sbom
 
-  secure-build:
+  # Each platform is built on a runner of that platform, so nothing is emulated:
+  # `cyber-dojo start-point create` (through the caller's `make image`) runs a
+  # plain docker build, which builds for the host. Each pushes its image to ECR
+  # as :<tag>-<arch>, and create-index names both in one index under :<tag>.
+  # `make image` runs the commander and versioner images, so on the arm64
+  # runner both must publish linux/arm64. The two build jobs differ only in
+  # runs-on, the arch suffix, and the if.
+  build-amd64:
     needs: test-policies
     runs-on: ubuntu-latest
     outputs:
-      digest: ${{ steps.sanitize-digest.outputs.digest }}
+      digest: ${{ steps.docker_build.outputs.digest }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/gh_actions_services
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 2400
+          role-session-name: ${{ github.event.repository.name }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.checkout_repository }}
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: ${{ inputs.checkout_fetch_depth }}
+
+      - name: Build the amd64 start-point image and push it to Amazon ECR
+        id: docker_build
+        env:
+          ARCH: amd64
+          IMAGE_NAME: ${{ inputs.image_name }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          LOCAL_IMAGE: ${{ inputs.local_image_name || format('cyberdojo/{0}', inputs.kosli_reference_name) }}
+        run: |
+          git fetch origin main:main || true
+          make image
+          docker tag "${LOCAL_IMAGE}:${IMAGE_TAG}" "${IMAGE_NAME}:${IMAGE_TAG}-${ARCH}"
+          docker push "${IMAGE_NAME}:${IMAGE_TAG}-${ARCH}"
+          DIGEST="$(docker buildx imagetools inspect "${IMAGE_NAME}:${IMAGE_TAG}-${ARCH}" \
+                      --format '{{ json .Manifest }}' | jq -r .digest)"
+          echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
+
+  build-arm64:
+    needs: test-policies
+    if: ${{ contains(inputs.platforms, 'linux/arm64') }}
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      digest: ${{ steps.docker_build.outputs.digest }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/gh_actions_services
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 2400
+          role-session-name: ${{ github.event.repository.name }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.checkout_repository }}
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: ${{ inputs.checkout_fetch_depth }}
+
+      - name: Build the arm64 start-point image and push it to Amazon ECR
+        id: docker_build
+        env:
+          ARCH: arm64
+          IMAGE_NAME: ${{ inputs.image_name }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          LOCAL_IMAGE: ${{ inputs.local_image_name || format('cyberdojo/{0}', inputs.kosli_reference_name) }}
+        run: |
+          git fetch origin main:main || true
+          make image
+          docker tag "${LOCAL_IMAGE}:${IMAGE_TAG}" "${IMAGE_NAME}:${IMAGE_TAG}-${ARCH}"
+          docker push "${IMAGE_NAME}:${IMAGE_TAG}-${ARCH}"
+          DIGEST="$(docker buildx imagetools inspect "${IMAGE_NAME}:${IMAGE_TAG}-${ARCH}" \
+                      --format '{{ json .Manifest }}' | jq -r .digest)"
+          echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
+
+  # Runs only if every platform asked for built and pushed, so a failure on any
+  # one publishes no tag at all. The condition is spelled out because
+  # build-arm64 is skipped when only linux/amd64 is asked for, and a skipped
+  # dependency would otherwise skip this job too.
+  create-index:
+    needs: [build-amd64, build-arm64]
+    if: >-
+      always() &&
+      needs.build-amd64.result == 'success' &&
+      (!contains(inputs.platforms, 'linux/arm64') || needs.build-arm64.result == 'success')
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.create-index.outputs.digest }}
       tagged_image_name: ${{ inputs.image_name }}:${{ inputs.image_tag }}
     permissions:
       id-token: write
@@ -156,39 +276,65 @@ jobs:
           role-duration-seconds: 2400
           role-session-name: ${{ github.event.repository.name }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
       - name: Login to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      # kosli attest artifact reads the commit from the git repo in the working
+      # directory. Before any file this job writes, as checkout cleans it.
       - uses: actions/checkout@v6
         with:
           repository: ${{ inputs.checkout_repository }}
           ref: ${{ inputs.checkout_ref }}
           fetch-depth: ${{ inputs.checkout_fetch_depth }}
 
-      # Build via `cyber-dojo start-point create` (through the caller's `make image`),
-      # then retag the locally-built image to the ECR name and push it. `make image`
-      # self-provisions the cyber-dojo CLI, so no extra setup is needed.
-      - name: Build start-point image and push to Amazon ECR
-        id: docker_build
+      # Empty when the caller passed no Docker Hub credentials, which leaves the
+      # login below skipped and the index tagged in ECR alone.
+      - name: Docker Hub tag
+        id: dockerhub
+        env:
+          DOCKER_USER: ${{ secrets.docker_user }}
+          IMAGE_NAME: ${{ inputs.image_name }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
-          git fetch origin main:main || true
-          make image
-          LOCAL_IMAGE="${{ inputs.local_image_name }}"
-          if [ -z "${LOCAL_IMAGE}" ]; then
-            LOCAL_IMAGE="cyberdojo/${{ inputs.kosli_reference_name }}"
+          if [ -n "${DOCKER_USER}" ]; then
+            echo "tag=cyberdojo/${IMAGE_NAME##*/}:${IMAGE_TAG}" >> "${GITHUB_OUTPUT}"
           fi
-          docker tag "${LOCAL_IMAGE}:${{ inputs.image_tag }}" "${{ inputs.image_name }}:${{ inputs.image_tag }}"
-          docker push "${{ inputs.image_name }}:${{ inputs.image_tag }}" | tee /tmp/docker-push.log
-          DIGEST="$(grep -oE 'sha256:[0-9a-f]{64}' /tmp/docker-push.log | head -1)"
-          echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
 
-      - name: Sanitize digest
-        id: sanitize-digest
+      - name: Login to Docker Hub
+        if: ${{ steps.dockerhub.outputs.tag != '' }}
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.docker_user }}
+          password: ${{ secrets.docker_pass }}
+
+      # One index, written under every tag, so ECR and Docker Hub hold the same
+      # bytes and so the same digest. imagetools copies the blobs Docker Hub
+      # lacks from ECR itself.
+      - name: Create the multi-platform index
+        id: create-index
+        env:
+          IMAGE_NAME: ${{ inputs.image_name }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          DOCKERHUB_TAG: ${{ steps.dockerhub.outputs.tag }}
+          AMD64_DIGEST: ${{ needs.build-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-arm64.outputs.digest }}
         run: |
-          DIGEST=$(echo ${{ steps.docker_build.outputs.digest }} | sed 's/^sha256://')
-          echo "DIGEST=${DIGEST}" >> ${GITHUB_ENV}
-          echo "digest=${DIGEST}" >> ${GITHUB_OUTPUT}
+          TAGS=(--tag "${IMAGE_NAME}:${IMAGE_TAG}")
+          if [ -n "${DOCKERHUB_TAG}" ]; then
+            TAGS+=(--tag "${DOCKERHUB_TAG}")
+          fi
+          REFS=("${IMAGE_NAME}@${AMD64_DIGEST}")
+          if [ -n "${ARM64_DIGEST}" ]; then
+            REFS+=("${IMAGE_NAME}@${ARM64_DIGEST}")
+          fi
+          docker buildx imagetools create "${TAGS[@]}" "${REFS[@]}"
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE_NAME}:${IMAGE_TAG}" \
+                     --format '{{ json .Manifest }}' | jq -r .digest | sed 's/^sha256://')
+          echo "DIGEST=${DIGEST}" >> "${GITHUB_ENV}"
+          echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
 
       - name: Save Docker image ready to upload
         run: |
