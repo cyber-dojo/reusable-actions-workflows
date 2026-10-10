@@ -46,8 +46,8 @@ on:
         default: ''
       platforms:
         required: false
-        type: string        # eg linux/amd64,linux/arm64
-        default: linux/amd64
+        type: string        # eg linux/amd64
+        default: linux/amd64,linux/arm64
 
       # inputs for Kosli CLI commands
       kosli_flow:
@@ -88,13 +88,13 @@ on:
     secrets:
       kosli_api_token:
         required: true
-      # When both are passed, the image is also pushed to Docker Hub as
+      # The image is also pushed to Docker Hub as
       # cyberdojo/<last part of image_name>:<image_tag>, by the same build,
       # so it has the same digest there as in ECR.
       docker_user:
-        required: false
+        required: true
       docker_pass:
-        required: false
+        required: true
 
 
 env:
@@ -288,21 +288,7 @@ jobs:
           ref: ${{ inputs.checkout_ref }}
           fetch-depth: ${{ inputs.checkout_fetch_depth }}
 
-      # Empty when the caller passed no Docker Hub credentials, which leaves the
-      # login below skipped and the index tagged in ECR alone.
-      - name: Docker Hub tag
-        id: dockerhub
-        env:
-          DOCKER_USER: ${{ secrets.docker_user }}
-          IMAGE_NAME: ${{ inputs.image_name }}
-          IMAGE_TAG: ${{ inputs.image_tag }}
-        run: |
-          if [ -n "${DOCKER_USER}" ]; then
-            echo "tag=cyberdojo/${IMAGE_NAME##*/}:${IMAGE_TAG}" >> "${GITHUB_OUTPUT}"
-          fi
-
       - name: Login to Docker Hub
-        if: ${{ steps.dockerhub.outputs.tag != '' }}
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.docker_user }}
@@ -316,14 +302,11 @@ jobs:
         env:
           IMAGE_NAME: ${{ inputs.image_name }}
           IMAGE_TAG: ${{ inputs.image_tag }}
-          DOCKERHUB_TAG: ${{ steps.dockerhub.outputs.tag }}
           AMD64_DIGEST: ${{ needs.build-amd64.outputs.digest }}
           ARM64_DIGEST: ${{ needs.build-arm64.outputs.digest }}
         run: |
           TAGS=(--tag "${IMAGE_NAME}:${IMAGE_TAG}")
-          if [ -n "${DOCKERHUB_TAG}" ]; then
-            TAGS+=(--tag "${DOCKERHUB_TAG}")
-          fi
+          TAGS+=(--tag "cyberdojo/${IMAGE_NAME##*/}:${IMAGE_TAG}")
           REFS=("${IMAGE_NAME}@${AMD64_DIGEST}")
           if [ -n "${ARM64_DIGEST}" ]; then
             REFS+=("${IMAGE_NAME}@${ARM64_DIGEST}")

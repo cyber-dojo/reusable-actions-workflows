@@ -60,6 +60,8 @@ jobs:
       attest_to_kosli: ${{ github.ref == 'refs/heads/main' }}        
     secrets:
       kosli_api_token: ${{ secrets.KOSLI_API_TOKEN }}
+      docker_user: ${{ secrets.DOCKER_USER }}
+      docker_pass: ${{ secrets.DOCKER_PASS }}
 
 
   after-build-image:
@@ -100,6 +102,8 @@ directory with the optional `build_context` and `dockerfile` inputs:
       attest_to_kosli: ${{ github.ref == 'refs/heads/main' }}
     secrets:
       kosli_api_token: ${{ secrets.KOSLI_API_TOKEN }}
+      docker_user: ${{ secrets.DOCKER_USER }}
+      docker_pass: ${{ secrets.DOCKER_PASS }}
 ```
 
 The whole repo is checked out, so the service directory is available as the
@@ -136,6 +140,8 @@ the tag `make image` produces locally before it is retagged to `image_name`
       attest_to_kosli: ${{ github.ref == 'refs/heads/main' }}
     secrets:
       kosli_api_token: ${{ secrets.KOSLI_API_TOKEN }}
+      docker_user: ${{ secrets.DOCKER_USER }}
+      docker_pass: ${{ secrets.DOCKER_PASS }}
 ```
 
 ## Versioning
