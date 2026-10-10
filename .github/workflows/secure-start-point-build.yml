@@ -146,8 +146,10 @@ jobs:
   # plain docker build, which builds for the host. Each pushes its image to ECR
   # as :<tag>-<arch>, and create-index names both in one index under :<tag>.
   # `make image` runs the commander and versioner images, so on the arm64
-  # runner both must publish linux/arm64. The two build jobs differ only in
-  # runs-on, the arch suffix, and the if.
+  # runner both must publish linux/arm64. DOCKER_DEFAULT_PLATFORM names the
+  # runner's own platform, so a caller script that defaults it to linux/amd64
+  # (as languages-start-points does, for local Macs) builds and runs natively.
+  # The two build jobs differ only in runs-on, the arch, and the if.
   build-amd64:
     needs: test-policies
     runs-on: ubuntu-latest
@@ -183,6 +185,7 @@ jobs:
         id: docker_build
         env:
           ARCH: amd64
+          DOCKER_DEFAULT_PLATFORM: linux/amd64
           IMAGE_NAME: ${{ inputs.image_name }}
           IMAGE_TAG: ${{ inputs.image_tag }}
           LOCAL_IMAGE: ${{ inputs.local_image_name || format('cyberdojo/{0}', inputs.kosli_reference_name) }}
@@ -231,6 +234,7 @@ jobs:
         id: docker_build
         env:
           ARCH: arm64
+          DOCKER_DEFAULT_PLATFORM: linux/arm64
           IMAGE_NAME: ${{ inputs.image_name }}
           IMAGE_TAG: ${{ inputs.image_tag }}
           LOCAL_IMAGE: ${{ inputs.local_image_name || format('cyberdojo/{0}', inputs.kosli_reference_name) }}
