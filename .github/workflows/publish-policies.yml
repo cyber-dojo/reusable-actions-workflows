@@ -1,0 +1,85 @@
+name: Publish rego policies
+
+# attest-and-evaluate records its decisions with `kosli evaluate policy
+# --identifier`, which evaluates the current published version, so a policy
+# change reaches the decisions only once it is published from main.
+on:
+  push:
+    branches: [main]
+    paths:
+      - SDLC-CTRL-0002/slsa-provenance.rego
+      - SDLC-CTRL-0004/sbom.rego
+      - .github/workflows/publish-policies.yml
+  # Publishing again is how a version Kosli could not validate is retried.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# An older merge publishing after a newer one would make its files the current
+# version, so runs wait for each other.
+concurrency:
+  group: publish-policies-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  KOSLI_HOST: https://app.kosli.com
+  KOSLI_ORG: cyber-dojo
+  # Only an org admin can publish.
+  KOSLI_API_TOKEN: ${{ secrets.KOSLI_API_TOKEN }}
+
+jobs:
+  # A policy that fails its own tests is never published.
+  test-policies:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: kosli-dev/setup-cli-action@v5
+        with:
+          version: ${{ vars.KOSLI_CLI_VERSION }}
+
+      - name: Run rego policy tests
+        run: make test-provenance test-sbom
+
+  # Both policies are published whichever one changed: Kosli stores no new
+  # version for unchanged files.
+  publish:
+    name: Publish ${{ matrix.identifier }}
+    needs: test-policies
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - identifier: SDLC-CTRL-0002
+            path: SDLC-CTRL-0002/slsa-provenance.rego
+            name: Binary Provenance (SLSA predicate)
+            description: https://sdlc.kosli.com/controls/build/binary_provenance/
+          - identifier: SDLC-CTRL-0004
+            path: SDLC-CTRL-0004/sbom.rego
+            name: Dependency Management (SBOM)
+            description: https://sdlc.kosli.com/controls/build/dependency_management/
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: kosli-dev/setup-cli-action@v5
+        with:
+          version: ${{ vars.KOSLI_CLI_VERSION }}
+
+      - name: Publish ${{ matrix.identifier }}
+        env:
+          IDENTIFIER: ${{ matrix.identifier }}
+          POLICY_PATH: ${{ matrix.path }}
+          NAME: ${{ matrix.name }}
+          DESCRIPTION: ${{ matrix.description }}
+        run: |
+          set -euo pipefail
+          kosli publish rego-policy "${IDENTIFIER}" \
+            --path "${POLICY_PATH}" \
+            --input-schema trail \
+            --name "${NAME}" \
+            --description "${DESCRIPTION}" \
+            --comment "$(git log -1 --format=%s), ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
