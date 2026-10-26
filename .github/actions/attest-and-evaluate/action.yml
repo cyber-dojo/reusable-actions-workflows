@@ -37,10 +37,10 @@ inputs:
 runs:
   using: "composite"
   steps:
-    # The rego policies, their distill filters, and the per-service SBOM
-    # overrides allow-lists all live in this repo. Check main out into a sibling
-    # path so the steps below read them from disk. main is deliberate: it is the
-    # source of truth the test-policies gate job runs the rego tests against.
+    # The distill filters and the per-service SBOM overrides allow-lists live in
+    # this repo. Check main out into a sibling path so the steps below read them
+    # from disk. main is deliberate: it is the source of truth the test-policies
+    # gate job runs the rego tests against, and the policies are published from.
     - name: Checkout reusable-actions-workflows policies
       uses: actions/checkout@v6
       with:
@@ -48,17 +48,14 @@ runs:
         ref: main
         path: reusable-actions-workflows
 
-    # The provenance policy and its distill filter, as paths into the checkout
-    # above. Exported so the run: steps below reference them by env var. The
-    # SBOM equivalents are set later, just before first use.
-    - name: Resolve provenance policy and facts filenames
+    # The provenance distill filter, as a path into the checkout above. Exported
+    # so the run: steps below reference it by env var. The SBOM equivalents are
+    # set later, just before first use.
+    - name: Resolve provenance facts filename
       shell: bash
       run: |
         base="reusable-actions-workflows/SDLC-CTRL-0002"
-        {
-          echo "PROV_REGO_POLICY_FILENAME=${base}/slsa-provenance.rego"
-          echo "PROV_FACTS_JQ_FILENAME=${base}/provenance-facts.jq"
-        } >> "${GITHUB_ENV}"
+        echo "PROV_FACTS_JQ_FILENAME=${base}/provenance-facts.jq" >> "${GITHUB_ENV}"
 
     - name: Attest Build Provenance
       id: artifact-gh-attest
@@ -138,30 +135,30 @@ runs:
         }' > provenance-eval-params.json
 
     # Evaluated where the trail is stored, and the decision recorded in the same
-    # request, so the compliant value never passes through this workflow. The
-    # decision carries the params, the result and the policy as a bundle.
+    # request, so the compliant value never passes through this workflow. Kosli
+    # records a decision only from a published policy, so this evaluates the
+    # current version publish-policies.yml published from main.
     - name: Evaluate SDLC-CTRL-0002 and record its decision
       if: ${{ inputs.attest_to_kosli == 'true' && (success() || failure()) }}
       shell: bash
       run:
         kosli evaluate policy
           --context "trail=${KOSLI_FLOW}/${KOSLI_TRAIL}"
-          --policy "${PROV_REGO_POLICY_FILENAME}"
+          --identifier SDLC-CTRL-0002
           --params @provenance-eval-params.json
           --control SDLC-CTRL-0002
           --name provenance-decision
           --fingerprint ${{ inputs.digest }}
 
-    # The SBOM policy, its distill filter, and the per-service overrides
-    # allow-list, as paths into the checkout above. Set here, just before the
-    # SBOM steps that first need them. The overrides list is keyed on
-    # kosli_reference_name and may be absent (handled below).
-    - name: Resolve SBOM policy and facts filenames
+    # The SBOM distill filter and the per-service overrides allow-list, as paths
+    # into the checkout above. Set here, just before the SBOM steps that first
+    # need them. The overrides list is keyed on kosli_reference_name and may be
+    # absent (handled below).
+    - name: Resolve SBOM facts and overrides filenames
       shell: bash
       run: |
         base="reusable-actions-workflows/SDLC-CTRL-0004"
         {
-          echo "SBOM_REGO_POLICY_FILENAME=${base}/sbom.rego"
           echo "SBOM_FACTS_JQ_FILENAME=${base}/sbom-facts.jq"
           echo "SBOM_OVERRIDES_FILENAME=${base}/sbom-overrides.${{ inputs.kosli_reference_name }}.json"
         } >> "${GITHUB_ENV}"
@@ -258,7 +255,7 @@ runs:
       run:
         kosli evaluate policy
           --context "trail=${KOSLI_FLOW}/${KOSLI_TRAIL}"
-          --policy "${SBOM_REGO_POLICY_FILENAME}"
+          --identifier SDLC-CTRL-0004
           --params @sbom-eval-params.json
           --control SDLC-CTRL-0004
           --name sbom-decision
