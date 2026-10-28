@@ -177,6 +177,29 @@ test_override_waives_only_its_named_check()
 }
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Package identity, driven off the entries syft gives saver's selenium-manager
+
+test_allow_when_one_version_is_listed_under_two_purls()
+{
+  local -r facts="$(facts_with '[
+    {"name":"selenium-manager","version":"0.4.51","license":"Apache-2.0","purl":"pkg:cargo/selenium-manager@0.4.51?download_url=file://."},
+    {"name":"selenium-manager","version":"0.4.51","license":"NOASSERTION","purl":"pkg:cargo/selenium-manager@0.4.51?download_url=file://.#src/main.rs"}
+  ]')"
+  evaluate_facts "${facts}"
+  assert_allow
+}
+
+test_allow_when_a_package_is_listed_twice_identically()
+{
+  local -r facts="$(facts_with '[
+    {"name":"selenium-manager","version":"0.4.51","license":"Apache-2.0","purl":"pkg:cargo/selenium-manager@0.4.51?download_url=file://."},
+    {"name":"selenium-manager","version":"0.4.51","license":"Apache-2.0","purl":"pkg:cargo/selenium-manager@0.4.51?download_url=file://."}
+  ]')"
+  evaluate_facts "${facts}"
+  assert_allow
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Document metadata checks (rego), driven off mutations of the real SPDX
 
 test_deny_when_spec_version_not_allowed()

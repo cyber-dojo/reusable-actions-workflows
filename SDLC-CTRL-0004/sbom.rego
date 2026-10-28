@@ -173,7 +173,7 @@ default applies(_) := false
 # report on. Each subject in sbom.ergo.yaml reads one of these fields.
 facts := {
 	"sbom": sbom_subject,
-	"packages": [package_subject(pkg) | some pkg in packages],
+	"packages": [s | some s in {package_subject(pkg) | some pkg in packages}],
 	"overrides": [override_subject(e) | some e in override_list],
 }
 
@@ -189,15 +189,22 @@ inventory_count(ps) := count(ps) if is_array(ps)
 
 else := null
 
-# A package's id is name@version, because an SBOM can list one name at several
-# versions (a gem and an apk zlib, say), and ergo needs every id unique.
+# ergo needs every id unique. A package's id is its purl, because syft can list
+# one name at one version under two purls (a cargo binary and its source), and
+# name@version when it has no purl. Packages are collected as a set, so one
+# listed twice identically is checked once.
 package_subject(pkg) := {
-	"id": sprintf("%v@%v", [object.get(pkg, "name", ""), object.get(pkg, "version", "")]),
+	"id": package_id(pkg),
 	"version": object.get(pkg, "version", null),
 	"purl": object.get(pkg, "purl", null),
 	"version_waived": waived(pkg, "version"),
 	"purl_waived": waived(pkg, "purl"),
 }
+
+package_id(pkg) := pkg.purl if {
+	is_string(pkg.purl)
+	pkg.purl != ""
+} else := sprintf("%v@%v", [object.get(pkg, "name", ""), object.get(pkg, "version", "")])
 
 # An override's id is package/check, because one package can have an override
 # for each check.
