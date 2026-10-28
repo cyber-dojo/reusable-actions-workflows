@@ -9,6 +9,8 @@ on:
     paths:
       - SDLC-CTRL-0002/slsa-provenance.rego
       - SDLC-CTRL-0004/sbom.rego
+      - SDLC-CTRL-0004/sbom.ergo.yaml
+      - lib/ergo.rego
       - .github/workflows/publish-policies.yml
   # Publishing again is how a version Kosli could not validate is retried.
   workflow_dispatch:
@@ -42,6 +44,18 @@ jobs:
         with:
           version: ${{ vars.KOSLI_CLI_VERSION }}
 
+      # setup-opa takes a literal version, so read the pin out of test.env
+      # rather than repeat it here and let the two drift apart.
+      - name: Read the OPA pin from test.env
+        id: pin
+        run: |
+          source test.env
+          echo "opa-version=${OPA_VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - uses: open-policy-agent/setup-opa@v2
+        with:
+          version: ${{ steps.pin.outputs.opa-version }}
+
       - name: Run rego policy tests
         run: make test-provenance test-sbom
 
@@ -56,12 +70,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # paths is space-separated, every file of the policy's bundle.
           - identifier: SDLC-CTRL-0002
-            path: SDLC-CTRL-0002/slsa-provenance.rego
+            paths: SDLC-CTRL-0002/slsa-provenance.rego
             name: Binary Provenance (SLSA predicate)
             description: https://sdlc.kosli.com/controls/build/binary_provenance/
           - identifier: SDLC-CTRL-0004
-            path: SDLC-CTRL-0004/sbom.rego
+            paths: SDLC-CTRL-0004/sbom.rego SDLC-CTRL-0004/sbom.ergo.yaml lib/ergo.rego
             name: Dependency Management (SBOM)
             description: https://sdlc.kosli.com/controls/build/dependency_management/
     steps:
@@ -74,13 +89,17 @@ jobs:
       - name: Publish ${{ matrix.identifier }}
         env:
           IDENTIFIER: ${{ matrix.identifier }}
-          POLICY_PATH: ${{ matrix.path }}
+          POLICY_PATHS: ${{ matrix.paths }}
           NAME: ${{ matrix.name }}
           DESCRIPTION: ${{ matrix.description }}
         run: |
           set -euo pipefail
+          path_args=()
+          for path in ${POLICY_PATHS}; do
+            path_args+=(--path "${path}")
+          done
           kosli publish rego-policy "${IDENTIFIER}" \
-            --path "${POLICY_PATH}" \
+            "${path_args[@]}" \
             --input-schema trail \
             --name "${NAME}" \
             --description "${DESCRIPTION}" \

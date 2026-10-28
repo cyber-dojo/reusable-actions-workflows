@@ -114,8 +114,9 @@ jobs:
 
   # Gate the build on this repo's own rego policy tests. Runs before the build
   # jobs (which need it), so a broken policy fails here before any image is built or
-  # pushed. The tests need jq (preinstalled) and the kosli CLI; they call
-  # `kosli evaluate input`, which makes no API calls, so no token is required.
+  # pushed. The tests need jq (preinstalled), the kosli CLI and opa; they call
+  # `kosli evaluate input` and `opa eval`, which make no API calls, so no token
+  # is required.
   test-policies:
     runs-on: ubuntu-latest
     permissions:
@@ -136,6 +137,20 @@ jobs:
         uses: kosli-dev/setup-cli-action@v5
         with:
           version: ${{ inputs.kosli_cli_version }}
+
+      # setup-opa takes a literal version, so read the pin out of test.env
+      # rather than repeat it here and let the two drift apart.
+      - name: Read the OPA pin from test.env
+        id: pin
+        shell: bash
+        run: |
+          source test.env
+          echo "opa-version=${OPA_VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: ${{ steps.pin.outputs.opa-version }}
 
       - name: Run rego policy tests
         shell: bash

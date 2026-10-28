@@ -6,7 +6,7 @@
 # The baseline is a genuine SBOM: fixtures/creator-sbom.spdx.json is a real syft
 # SPDX slice taken from a cyber-dojo creator-ci build. Tests mutate that real
 # SPDX, distill it through the SAME sbom-facts.jq the workflow uses, and
-# evaluate the result with `kosli evaluate input` (no API calls).
+# evaluate the result with `opa eval` (no API calls).
 #
 # The genuine creator SBOM contains packages that fail the strict per-package
 # checks (no license: .ruby-rundeps, minitest-ci, ruby, selenium-manager; no
@@ -16,7 +16,12 @@
 readonly my_dir="$(cd "$(dirname "${0}")" && pwd)"
 readonly control_dir="$(cd "${my_dir}/.." && pwd)"
 
-readonly REGO="${control_dir}/sbom.rego"
+# Defines _opa, and W, the prefix a path given to _opa must carry.
+. "${control_dir}/../bin/lib-opa.sh"
+
+readonly REGO="${W}/SDLC-CTRL-0004/sbom.rego"
+readonly ERGO_POLICY="${W}/SDLC-CTRL-0004/sbom.ergo.yaml"
+readonly ERGO_LIB="${W}/lib/ergo.rego"
 readonly DISTILL="${control_dir}/sbom-facts.jq"
 readonly FIXTURE="${my_dir}/fixtures/creator-sbom.spdx.json"
 readonly CREATOR_OVERRIDES="${control_dir}/sbom-overrides.creator.json"
@@ -136,8 +141,8 @@ test_deny_genuine_sbom_when_no_overrides_apply()
   local -r facts="$(distill "$(cat "${FIXTURE}")")"
   evaluate_facts "${facts}" "$(make_params "${NOW}" '[]')"
   assert_deny
-  assert_violation_message "package 'selenium-manager' has no resolvable purl identity"
-  refute_violation_message "package 'ruby' has no declared license"
+  assert_violation purls purl_set selenium-manager@UNKNOWN
+  assert_violation_count 1
 }
 
 test_deny_when_the_override_has_expired()
@@ -146,8 +151,8 @@ test_deny_when_the_override_has_expired()
   local -r facts="$(distill "$(cat "${FIXTURE}")")"
   evaluate_facts "${facts}" "$(make_params "2027-06-01" "$(overrides_of "${CREATOR_OVERRIDES}")")"
   assert_deny
-  assert_violation_message "package 'selenium-manager' has no resolvable purl identity"
-  assert_violation_message "override for package 'selenium-manager' check 'purl' expired on 2027-01-08 -- renew or remove it"
+  assert_violation purls purl_set selenium-manager@UNKNOWN
+  assert_violation overrides not_expired selenium-manager/purl
 }
 
 test_no_waiver_when_the_now_param_is_absent()
@@ -156,7 +161,7 @@ test_no_waiver_when_the_now_param_is_absent()
   local -r facts="$(distill "$(cat "${FIXTURE}")")"
   evaluate_facts "${facts}" "$(make_params "" "$(overrides_of "${CREATOR_OVERRIDES}")")"
   assert_deny
-  assert_violation_message "package 'selenium-manager' has no resolvable purl identity"
+  assert_violation purls purl_set selenium-manager@UNKNOWN
 }
 
 test_override_waives_only_its_named_check()
@@ -167,8 +172,8 @@ test_override_waives_only_its_named_check()
   local -r ovr='[{"package":"selenium-manager","check":"purl","reason":"vendored binary, no purl","expires":"2027-01-08"}]'
   evaluate_facts "${facts}" "$(make_params "${NOW}" "${ovr}")"
   assert_deny
-  assert_violation_message "package 'selenium-manager' has no concrete version"
-  refute_violation_message "package 'selenium-manager' has no resolvable purl identity"
+  assert_violation versions version_set selenium-manager@
+  refute_violation purls purl_set selenium-manager@
 }
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -178,21 +183,21 @@ test_deny_when_spec_version_not_allowed()
 {
   evaluate_spdx "$(jq '.spdxVersion = "SPDX-2.2"' "${FIXTURE}")"
   assert_deny
-  assert_violation_message "SBOM document metadata incomplete: spec_version 'SPDX-2.2' not in allowed set, or created/creators missing"
+  assert_violation document spec_version
 }
 
 test_deny_when_created_timestamp_blank()
 {
   evaluate_spdx "$(jq '.creationInfo.created = ""' "${FIXTURE}")"
   assert_deny
-  assert_violation_message "SBOM document metadata incomplete: spec_version 'SPDX-2.3' not in allowed set, or created/creators missing"
+  assert_violation document created
 }
 
 test_deny_when_no_creators_recorded()
 {
   evaluate_spdx "$(jq '.creationInfo.creators = []' "${FIXTURE}")"
   assert_deny
-  assert_violation_message "SBOM document metadata incomplete: spec_version 'SPDX-2.3' not in allowed set, or created/creators missing"
+  assert_violation document creators
 }
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -202,14 +207,14 @@ test_deny_when_no_relationships()
 {
   evaluate_spdx "$(jq '.relationships = []' "${FIXTURE}")"
   assert_deny
-  assert_violation_message "SBOM has no relationships -- it is not a dependency graph rooted at the image"
+  assert_violation document dependency_graph
 }
 
 test_deny_when_inventory_is_empty()
 {
   evaluate_spdx "$(jq '.packages = []' "${FIXTURE}")"
   assert_deny
-  assert_violation_message "SBOM inventory has 0 packages, below the minimum of 1"
+  assert_violation document inventory_size
 }
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -220,7 +225,7 @@ test_deny_when_sbom_facts_attestation_missing()
   # Artifact present in the trail, but carrying no sbom-facts attestation.
   evaluate_input "$(jq -n '{trail: {name: "t", compliance_status: {artifacts_statuses: {creator: {attestations_statuses: {}}}}}}')"
   assert_deny
-  assert_violation_message "no 'sbom-facts' SBOM facts attestation found under artifact 'creator' -- SBOM was not attested as structured data"
+  assert_violation document '$min_subjects'
 }
 
 test_deny_when_packages_is_not_an_array_fails_safe()
@@ -230,21 +235,21 @@ test_deny_when_packages_is_not_an_array_fails_safe()
   local -r facts="$(distill "$(cat "${FIXTURE}")" | jq '.packages = "not-an-array"')"
   evaluate_facts "${facts}"
   assert_deny
-  assert_violation_message "'sbom-facts' SBOM facts attestation under artifact 'creator' has no packages array"
+  assert_violation document inventory
 }
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-# Evaluate a complete policy input (trail JSON) against the rego.
+# Evaluate a complete policy input (trail JSON) against the rego. The params go
+# in the query rather than a file, so a Docker opa needs no mount but the repo.
 evaluate_input()
 {
   local -r input="${1}"
   local -r params="${2:-${BASE_PARAMS}}"
-  echo "${input}" | kosli evaluate input \
-    --policy "${REGO}" \
-    --params "${params}" \
-    --output json \
-    >"${stdoutF}" 2>"${stderrF}"
+  _opa eval --stdin-input --format raw \
+    --data "${REGO}" --data "${ERGO_POLICY}" --data "${ERGO_LIB}" \
+    "{\"allow\": data.policy.allow, \"violations\": data.policy.violations} with data.params as ${params}" \
+    <<<"${input}" >"${stdoutF}" 2>"${stderrF}"
   echo $? >"${statusF}"
 }
 
@@ -264,7 +269,7 @@ evaluate_spdx()
 assert_allow()
 {
   assertEquals "allow:$(dump_sss)" "true" "$(jq '.allow' "${stdoutF}")"
-  assertEquals "violations:$(dump_sss)" "null" "$(jq '.violations' "${stdoutF}")"
+  assertEquals "violations:$(dump_sss)" "0" "$(jq '.violations | length' "${stdoutF}")"
 }
 
 # Assert the policy denied (allow == false), read from stdout regardless of exit.
@@ -273,28 +278,43 @@ assert_deny()
   assertEquals "allow:$(dump_sss)" "false" "$(jq '.allow' "${stdoutF}")"
 }
 
-# Assert the given exact string is one of the reported violations.
-assert_violation_message()
+# How many violations fail the given requirement's check, for any subject when
+# subject_id is "". A jq error is printed in place of the count, so neither
+# assertion below can mistake it for one.
+violations_of()
 {
-  local -r expected="${1}"
-  local found
-  found="$(jq --arg s "${expected}" '.violations[] | select(. == $s)' "${stdoutF}")"
-  if [ -z "${found}" ]; then
+  local -r requirement="${1}" check="${2}" subject_id="${3:-}"
+  jq --arg r "${requirement}" --arg c "${check}" --arg id "${subject_id}" \
+    '[.violations[]? | select(.requirement == $r and .check == $c and ($id == "" or .subject.id == $id))] | length' \
+    "${stdoutF}" 2>&1
+}
+
+# Assert the requirement's check failed, for the subject when one is given.
+assert_violation()
+{
+  local -r count="$(violations_of "$@")"
+  case "${count}" in
+    '' | *[!0-9]* | 0)
+      dump_sss
+      fail "expected a violation of ${1}.${2}${3:+ for '${3}'}, got: ${count}"
+      ;;
+  esac
+}
+
+# Assert the requirement's check did not fail, for the subject when one is given.
+refute_violation()
+{
+  local -r count="$(violations_of "$@")"
+  if [ "${count}" != "0" ]; then
     dump_sss
-    fail "expected violations to include '${expected}'"
+    fail "expected no violation of ${1}.${2}${3:+ for '${3}'}, got: ${count}"
   fi
 }
 
-# Assert the given exact string is NOT one of the reported violations.
-refute_violation_message()
+# Assert exactly this many violations were reported.
+assert_violation_count()
 {
-  local -r unexpected="${1}"
-  local found
-  found="$(jq --arg s "${unexpected}" '.violations[]? | select(. == $s)' "${stdoutF}")"
-  if [ -n "${found}" ]; then
-    dump_sss
-    fail "expected violations NOT to include '${unexpected}'"
-  fi
+  assertEquals "violation count:$(dump_sss)" "${1}" "$(jq '.violations | length' "${stdoutF}")"
 }
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
