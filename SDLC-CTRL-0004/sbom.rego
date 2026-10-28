@@ -1,5 +1,6 @@
 package policy
 
+import data.ergo
 import rego.v1
 
 # Dependency Management / SBOM (SDLC-CTRL-0004)
@@ -18,8 +19,10 @@ import rego.v1
 # syft cannot resolve licenses for many ecosystems (Go modules in particular),
 # so gating on license would fail every build without adding real assurance.
 #
-# Per-package checks are strict (every package must satisfy them) except where a
-# package is explicitly waived by the per-service overrides allow-list (see PARAMS).
+# The checks are ergo requirements, written as sentences in sbom.ergo.yaml, over
+# the facts this file builds. This file also decides which overrides are
+# active. So it is evaluated as a bundle of this file, sbom.ergo.yaml and
+# lib/ergo.rego, never as this file alone.
 #
 # WHAT THIS POLICY READS
 # ----------------------
@@ -31,7 +34,7 @@ import rego.v1
 #
 # So the workflow must distill sbom.spdx.json (SPDX 2.3 JSON) into the small,
 # rego-friendly attestation_data contract below, and attest it BEFORE this
-# policy is evaluated. This policy holds the checks; the jq step only reshapes.
+# policy is evaluated. sbom.ergo.yaml holds the checks; the jq step only reshapes.
 #
 # REQUIRED attestation_data CONTRACT (produced by the sbom-facts.jq distill step)
 # -------------------------------------------------------------------------------
@@ -52,7 +55,7 @@ import rego.v1
 #
 # The server does not return the input it evaluated. The input path is pinned
 # by tests/test_sbom_rego_rules.sh, which builds that input shape.
-# If the SBOM facts attestation lands elsewhere, adjust the single `sbom` line below.
+# If the SBOM facts attestation lands elsewhere, adjust the single `sbom` rule below.
 #
 # PARAMS (kosli evaluate policy --params @file.json)
 #   artifact_name          template reference name of the artifact (eg "saver")
@@ -65,11 +68,15 @@ import rego.v1
 #                            {package, check: version|purl, reason, expires}
 #                          A missing / expired / malformed entry waives nothing.
 #
-# Every param is aliased at the top. A missing param becomes undefined, so the
-# rule that uses it fails and allow stays false -- fail toward non-compliance.
-# The overrides list is additive (it only makes packages pass), so a missing or
-# invalid overrides list makes fewer packages pass -- also fail toward non-compliance.
+# A missing param fails every check that reads it, so allow stays false -- fail
+# toward non-compliance. The overrides list is additive (it only makes packages
+# pass), so a missing or invalid overrides list makes fewer packages pass --
+# also fail toward non-compliance.
 
+control := {"control": "SDLC-CTRL-0004", "title": "Dependency Management", "url": "https://sdlc.kosli.com/controls/build/dependency_management/"}
+
+# METADATA
+# entrypoint: true
 default allow := false
 
 # Artifact template reference name; falls back to "artifact" to match SDLC-CTRL-0002.
@@ -79,42 +86,34 @@ artifact_name := name if {
 } else := "artifact"
 
 # Name of the custom attestation carrying the distilled SBOM facts. No fallback:
-# if absent, sbom below is undefined and the policy is non-compliant.
-sbom_attestation_name := data.params.sbom_attestation_name
-
-min_packages := data.params.min_packages
+# "" names no attestation, so the sbom subject is missing and document fails.
+sbom_attestation_name := name if {
+	name := data.params.sbom_attestation_name
+	is_string(name)
+} else := ""
 
 # Evaluation date ("YYYY-MM-DD") used to expire overrides. If absent, no
 # override is active -- exemptions fail toward non-compliance.
 now_date := data.params.now
 
-# If absent the comprehension yields the empty set, blocking every document.
-allowed_spec_versions := {v | some v in data.params.allowed_spec_versions}
-
 # ---------------------------------------------------------------------------
 # Single source of truth for where the SBOM facts live in the trail input.
-# Adjust ONLY this line if the shape of the trail moment changes.
+# Adjust ONLY this rule if the shape of the trail moment changes.
 # ---------------------------------------------------------------------------
-sbom := input.trail.compliance_status.artifacts_statuses[artifact_name].attestations_statuses[sbom_attestation_name].attestation_data
+sbom := object.get(input, ["trail", "compliance_status", "artifacts_statuses", artifact_name, "attestations_statuses", sbom_attestation_name, "attestation_data"], null)
 
-packages := sbom.packages
+packages := ps if {
+	is_object(sbom)
+	ps := sbom.packages
+	is_array(ps)
+} else := []
 
-# ---------------------------------------------------------------------------
-# allow is driven by positive assertions (every condition must hold), never by
-# the absence of violations. A silently-undefined reference can then only fail a
-# condition (blocking compliance); it can never fabricate a compliant result.
-# ---------------------------------------------------------------------------
-allow if {
-	inventory_present
-	inventory_non_empty
-	document_well_formed
-	has_dependency_graph
-	all_packages_versioned
-	all_packages_identified
-}
+override_list := data.params.overrides if is_array(data.params.overrides)
+
+else := []
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Overrides
 # ---------------------------------------------------------------------------
 
 # A field is unset if it is absent, empty, or an SPDX no-value sentinel.
@@ -131,17 +130,11 @@ field_of(pkg, "version") := pkg.version
 
 field_of(pkg, "purl") := pkg.purl
 
-# A package satisfies a check when the field is set, or when the package is
-# explicitly exempted from that check by the overrides allow-list.
-package_satisfies(pkg, check) if not is_unset(field_of(pkg, check))
-
-package_satisfies(pkg, check) if exempt(pkg, check)
-
 # An overrides entry waives one check for one package only when it has a
 # non-empty reason and is not expired. A missing / malformed / expired entry
 # waives nothing.
 exempt(pkg, check) if {
-	some e in data.params.overrides
+	some e in override_list
 	e.package == pkg.name
 	e.check == check
 	is_string(e.reason)
@@ -157,107 +150,84 @@ override_active(e) if {
 	e.expires >= now_date
 }
 
-# ---------------------------------------------------------------------------
-# Positive conditions
-# ---------------------------------------------------------------------------
+waived(pkg, check) if exempt(pkg, check)
 
-# defined: a SBOM facts attestation is present on the trail for this artifact.
-sbom_present if is_object(sbom)
+default waived(_, _) := false
 
-# defined: the SBOM facts attestation is present and carries a package array.
-inventory_present if {
-	sbom_present
-	is_array(packages)
-}
-
-# defined: the inventory is not suspiciously empty (empty usually means the
-# SBOM generation silently failed).
-inventory_non_empty if count(packages) >= min_packages
-
-# auditable: the document declares a known spec version, a creation timestamp,
-# and at least one generating tool.
-document_well_formed if {
-	sbom.spec_version in allowed_spec_versions
-	is_string(sbom.created)
-	sbom.created != ""
-	count(sbom.creators) > 0
-}
-
-# defined: the SBOM is a real dependency graph rooted at the image, not a flat
-# list with no relationships.
-has_dependency_graph if sbom.relationship_count > 0
-
-# managed: every package pins a concrete version (or is exempted).
-all_packages_versioned if {
-	every pkg in packages {
-		package_satisfies(pkg, "version")
-	}
-}
-
-# auditable: every package carries a resolvable purl identity (or is exempted).
-all_packages_identified if {
-	every pkg in packages {
-		package_satisfies(pkg, "purl")
-	}
-}
-
-# ---------------------------------------------------------------------------
-# Violations (diagnostics only; they do not drive allow)
-# ---------------------------------------------------------------------------
-
-violations contains sprintf("no '%v' SBOM facts attestation found under artifact '%v' -- SBOM was not attested as structured data", [sbom_attestation_name, artifact_name]) if {
-	not sbom_present
-}
-
-violations contains sprintf("'%v' SBOM facts attestation under artifact '%v' has no packages array", [sbom_attestation_name, artifact_name]) if {
-	sbom_present
-	not is_array(object.get(sbom, "packages", null))
-}
-
-violations contains sprintf("SBOM inventory has %d packages, below the minimum of %d", [count(packages), min_packages]) if {
-	is_array(packages)
-	not inventory_non_empty
-}
-
-violations contains sprintf("SBOM document metadata incomplete: spec_version '%v' not in allowed set, or created/creators missing", [object.get(sbom, "spec_version", "<missing>")]) if {
-	sbom_present
-	not document_well_formed
-}
-
-violations contains "SBOM has no relationships -- it is not a dependency graph rooted at the image" if {
-	sbom_present
-	not has_dependency_graph
-}
-
-violations contains sprintf("package '%v' has no concrete version", [pkg.name]) if {
-	some pkg in packages
-	is_unset(pkg.version)
-	not exempt(pkg, "version")
-}
-
-violations contains sprintf("package '%v' has no resolvable purl identity", [pkg.name]) if {
-	some pkg in packages
-	is_unset(pkg.purl)
-	not exempt(pkg, "purl")
-}
-
-# An expired override no longer waives its package, so the check above fires
-# again; this names the stale override so it can be renewed or removed.
-violations contains sprintf("override for package '%v' check '%v' expired on %v -- renew or remove it", [e.package, e.check, e.expires]) if {
-	some e in data.params.overrides
-	is_string(e.expires)
-	is_string(now_date)
-	e.expires < now_date
+# An override applies where a package it names lacks the field it waives, so
+# only those overrides are checked for expiry.
+applies(e) if {
 	some pkg in packages
 	pkg.name == e.package
 	is_unset(field_of(pkg, e.check))
+}
+
+default applies(_) := false
+
+# ---------------------------------------------------------------------------
+# Facts: what ergo checks
+# ---------------------------------------------------------------------------
+
+# The input ergo reads. Every value is defined whatever the trail holds, because
+# an undefined field would drop the whole document and leave ergo nothing to
+# report on. Each subject in sbom.ergo.yaml reads one of these fields.
+facts := {
+	"sbom": sbom_subject,
+	"packages": [package_subject(pkg) | some pkg in packages],
+	"overrides": [override_subject(e) | some e in override_list],
+}
+
+sbom_subject := s if {
+	is_object(sbom)
+	s := object.union(sbom, {
+		"name": sbom_attestation_name,
+		"package_count": inventory_count(object.get(sbom, "packages", null)),
+	})
+} else := null
+
+inventory_count(ps) := count(ps) if is_array(ps)
+
+else := null
+
+# A package's id is name@version, because an SBOM can list one name at several
+# versions (a gem and an apk zlib, say), and ergo needs every id unique.
+package_subject(pkg) := {
+	"id": sprintf("%v@%v", [object.get(pkg, "name", ""), object.get(pkg, "version", "")]),
+	"version": object.get(pkg, "version", null),
+	"purl": object.get(pkg, "purl", null),
+	"version_waived": waived(pkg, "version"),
+	"purl_waived": waived(pkg, "purl"),
+}
+
+# An override's id is package/check, because one package can have an override
+# for each check.
+override_subject(e) := {
+	"id": sprintf("%v/%v", [e.package, e.check]),
+	"expires": object.get(e, "expires", null),
+	"applies": applies(e),
 }
 
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
 
-output := {
-	"allow": allow,
-	"violations": violations,
-}
+params_object := data.params if is_object(data.params)
+
+else := {}
+
+written := {"ergo_spec": data.ergo_spec, "description": data.description, "subjects": data.subjects, "requirements": data.requirements}
+
+policy := object.union(written, {
+	"meta": control,
+	"requirements": {name: object.union(r, {"meta": control}) | some name, r in written.requirements},
+})
+
+# METADATA
+# entrypoint: true
+report := ergo.report(facts, policy, params_object)
+
+allow if report.compliant
+
+# METADATA
+# entrypoint: true
+violations := ergo.violations(report)

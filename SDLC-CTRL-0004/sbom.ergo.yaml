@@ -1,0 +1,71 @@
+ergo_spec: v0.2
+description: The artifact's SBOM is a well-formed dependency graph, and every package in it has a concrete version and a resolvable purl
+subjects:
+  sbom:
+    description: The SBOM facts attested to the artifact named by the artifact_name param
+    identified_by: name
+  package needing a version:
+    description: A package of the SBOM that no active override waives the version check for
+    from: packages whose version_waived is false
+    identified_by: id
+  package needing a purl:
+    description: A package of the SBOM that no active override waives the purl check for
+    from: packages whose purl_waived is false
+    identified_by: id
+  applicable override:
+    description: An override for a package of the SBOM that lacks the field the override waives
+    from: overrides whose applies is true
+    identified_by: id
+requirements:
+  document:
+    description: The SBOM is attested, well-formed, and a non-empty dependency graph
+    subject: sbom
+    checks:
+      spec_version:
+        description: The SBOM declares an allowed spec version
+        assert: spec_version is in $params.allowed_spec_versions
+      created:
+        description: The SBOM records when it was created
+        assert: created is a non-empty string
+      creators:
+        description: The SBOM records at least one tool that generated it
+        assert: creators is not empty
+      dependency_graph:
+        description: The SBOM is a dependency graph rooted at the image, not a flat list
+        assert: relationship_count is at least 1
+      inventory:
+        description: The SBOM carries a list of packages
+        assert: packages is a list
+      inventory_size:
+        description: The SBOM lists at least min_packages packages, since an empty one usually means generation failed
+        assert: package_count is at least $params.min_packages
+  versions:
+    description: Every package pins a concrete version
+    subject: package needing a version
+    min_subjects: 0
+    checks:
+      version_set:
+        description: The package has a version
+        assert: version is a non-empty string
+      version_asserted:
+        description: The package's version is not an SPDX no-value sentinel
+        assert: "version does not match '(?i)^(NOASSERTION|NONE)$'"
+  purls:
+    description: Every package carries a resolvable purl identity
+    subject: package needing a purl
+    min_subjects: 0
+    checks:
+      purl_set:
+        description: The package has a purl
+        assert: purl is a non-empty string
+      purl_asserted:
+        description: The package's purl is not an SPDX no-value sentinel
+        assert: "purl does not match '(?i)^(NOASSERTION|NONE)$'"
+  overrides:
+    description: Every override that waives a check is still active
+    subject: applicable override
+    min_subjects: 0
+    checks:
+      not_expired:
+        description: The override expires on or after the evaluation date, so renew or remove it once it has not
+        assert: expires is on or after $params.now
