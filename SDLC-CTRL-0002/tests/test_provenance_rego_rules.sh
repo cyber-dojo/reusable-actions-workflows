@@ -206,7 +206,7 @@ evaluate_input()
 assert_allow()
 {
   assertEquals "allow:$(dump_sss)" "true" "$(jq '.allow' "${stdoutF}")"
-  assertEquals "violations:$(dump_sss)" "null" "$(jq '.violations' "${stdoutF}")"
+  assertEquals "violations:$(dump_sss)" "[]" "$(jq '.violations' "${stdoutF}")"
 }
 
 assert_deny()
