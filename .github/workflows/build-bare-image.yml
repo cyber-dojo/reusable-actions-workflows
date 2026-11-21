@@ -58,11 +58,13 @@ on:
 
 jobs:
 
-  # The cache key, decided once for both platforms.
-  hash:
+  # The two build jobs differ only in runs-on, the platform, and the if. Each
+  # hashes the instructions itself, for its own cache key: the two keys never
+  # need to agree, and a job with no other to wait for starts sooner.
+  build-amd64:
     runs-on: ubuntu-latest
     outputs:
-      hash: ${{ steps.hash.outputs.hash }}
+      digest: ${{ steps.digest.outputs.digest }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@v2
@@ -88,30 +90,12 @@ jobs:
                   | sha256sum | cut --delimiter=' ' --fields=1)"
           echo "hash=${HASH}" >> "${GITHUB_OUTPUT}"
 
-  # The two build jobs differ only in runs-on, the platform, and the if.
-  build-amd64:
-    needs: hash
-    runs-on: ubuntu-latest
-    outputs:
-      digest: ${{ steps.digest.outputs.digest }}
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@v2
-        with:
-          egress-policy: audit
-
-      - uses: actions/checkout@v6
-        with:
-          repository: ${{ inputs.checkout_repository }}
-          ref: ${{ inputs.checkout_ref }}
-          fetch-depth: 1
-
       - name: Restore the bare image built from these instructions
         id: cached
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/bare-image.tar
-          key: ${{ inputs.artifact_prefix }}-amd64-${{ needs.hash.outputs.hash }}
+          key: ${{ inputs.artifact_prefix }}-amd64-${{ steps.hash.outputs.hash }}
 
       - if: ${{ steps.cached.outputs.cache-hit != 'true' }}
         uses: docker/setup-buildx-action@v4
@@ -134,7 +118,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/bare-image.tar
-          key: ${{ inputs.artifact_prefix }}-amd64-${{ needs.hash.outputs.hash }}
+          key: ${{ inputs.artifact_prefix }}-amd64-${{ steps.hash.outputs.hash }}
 
       - name: Read its digest
         id: digest
@@ -152,7 +136,6 @@ jobs:
           retention-days: 1
 
   build-arm64:
-    needs: hash
     if: ${{ contains(inputs.platforms, 'linux/arm64') }}
     runs-on: ubuntu-24.04-arm
     outputs:
@@ -169,12 +152,25 @@ jobs:
           ref: ${{ inputs.checkout_ref }}
           fetch-depth: 1
 
+      - name: Hash the bare image stage's instructions
+        id: hash
+        env:
+          DOCKERFILE: ${{ inputs.dockerfile }}
+          NEXT_FROM: FROM ${{ inputs.bare_image_stage }}
+        run: |
+          grep --quiet --line-regexp --fixed-strings "${NEXT_FROM}" "${DOCKERFILE}" \
+            || { echo "No '${NEXT_FROM}' line in ${DOCKERFILE}"; exit 1; }
+          HASH="$(awk -v next_from="${NEXT_FROM}" '{print} $0 == next_from {exit}' "${DOCKERFILE}" \
+                  | grep --invert-match --extended-regexp '^[[:space:]]*(#|$)' \
+                  | sha256sum | cut --delimiter=' ' --fields=1)"
+          echo "hash=${HASH}" >> "${GITHUB_OUTPUT}"
+
       - name: Restore the bare image built from these instructions
         id: cached
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/bare-image.tar
-          key: ${{ inputs.artifact_prefix }}-arm64-${{ needs.hash.outputs.hash }}
+          key: ${{ inputs.artifact_prefix }}-arm64-${{ steps.hash.outputs.hash }}
 
       - if: ${{ steps.cached.outputs.cache-hit != 'true' }}
         uses: docker/setup-buildx-action@v4
@@ -197,7 +193,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/bare-image.tar
-          key: ${{ inputs.artifact_prefix }}-arm64-${{ needs.hash.outputs.hash }}
+          key: ${{ inputs.artifact_prefix }}-arm64-${{ steps.hash.outputs.hash }}
 
       - name: Read its digest
         id: digest
