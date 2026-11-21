@@ -1,0 +1,419 @@
+name: Secure docker build, FROM a runtime
+
+# secure-docker-build.yml, except that each platform's image is built FROM a
+# runtime the caller has already built and tested: the Dockerfile stage named
+# by runtime_stage (eg base) is replaced, by --build-context, with the OCI
+# layout the caller uploaded as the artifact <runtime_artifact_prefix>-<arch>
+# (eg saver-runtime-amd64), holding it as runtime.tar (docker buildx build
+# --target base --output type=oci,dest=runtime.tar). So the image's layers start with the
+# runtime's, exactly, and the caller's unit tests ran in the image's runtime.
+# Everything else (no-cache, provenance, SBOM, the index, the Kosli
+# attestations and evaluations) is as secure-docker-build.yml does it.
+
+on:
+  workflow_call:
+    outputs:
+      digest:
+        description: The SHA256 image digest
+        value: ${{ jobs.create-index.outputs.digest }}
+      tagged_image_name:
+        description: "eg 244531986313.dkr.ecr.eu-central-1.amazonaws.com/differ:52ec808"
+        value: ${{ jobs.create-index.outputs.tagged_image_name }}
+
+    inputs:
+      # inputs for actions/checkout@v6
+      checkout_repository:
+        required: true
+        type: string        # eg cyberdojo/differ
+      checkout_ref:
+        required: true
+        type: string        # eg ${{ github.sha }}
+      checkout_fetch_depth:
+        required: true
+        type: string        # eg 1
+
+      # inputs for docker/build-push-action@v7
+      image_name:
+        required: true
+        type: string        # eg 244531986313.dkr.ecr.eu-central-1.amazonaws.com/differ
+      image_tag:
+        required: true
+        type: string        # eg 52ec808
+      image_build_args:
+        required: false
+        type: string
+      build_context:
+        required: false
+        type: string        # eg services/foo (defaults to repo root)
+        default: .
+      dockerfile:
+        required: false
+        type: string        # eg services/foo/Dockerfile (defaults to ./Dockerfile)
+        default: ./Dockerfile
+      target:
+        required: false
+        type: string        # eg web (defaults to the Dockerfile's last stage)
+        default: ''
+      platforms:
+        required: false
+        type: string        # eg linux/amd64
+        default: linux/amd64,linux/arm64
+
+      # The runtime: one artifact per platform, each a tar of an OCI
+      # layout, uploaded earlier in the caller's run.
+      runtime_artifact_prefix:
+        required: true
+        type: string        # eg saver-runtime (artifacts saver-runtime-amd64, saver-runtime-arm64)
+      runtime_stage:
+        required: false
+        type: string        # the Dockerfile stage the runtime replaces
+        default: base
+
+      # inputs for Kosli CLI commands
+      kosli_flow:
+        required: true
+        type: string
+      kosli_trail:          # eg ${{ vars.KOSLI_FLOW }}
+        required: true
+        type: string        # eg ${{ inputs.KOSLI_TRAIL }}
+      kosli_reference_name:
+        required: true
+        type: string        # eg saver
+
+      attest_to_kosli:
+        required: false
+        type: boolean       # eg ${{ github.ref == 'refs/heads/main' }}
+        default: true
+      kosli_cli_version:
+        required: false
+        type: string
+        default: ${{ vars.KOSLI_CLI_VERSION }}
+      kosli_debug:
+        required: false
+        type: string
+        default: ${{ vars.KOSLI_DEBUG }}
+      kosli_dry_run:
+        required: false
+        type: string
+        default: ${{ vars.KOSLI_DRY_RUN }}
+      kosli_host:
+        required: false
+        type: string
+        default: ${{ vars.KOSLI_HOST }}
+      kosli_org:
+        required: false
+        type: string
+        default: ${{ vars.KOSLI_ORG }}
+
+    secrets:
+      kosli_api_token:
+        required: true
+      # The image is also pushed to Docker Hub as
+      # cyberdojo/<last part of image_name>:<image_tag>, by the same build,
+      # so it has the same digest there as in ECR.
+      docker_user:
+        required: true
+      docker_pass:
+        required: true
+
+
+env:
+  KOSLI_API_TOKEN: ${{ secrets.kosli_api_token }}
+  KOSLI_DEBUG:     ${{ inputs.kosli_debug }}          # true/false
+  KOSLI_DRY_RUN:   ${{ inputs.kosli_dry_run }}        # true/false
+  KOSLI_HOST:      ${{ inputs.kosli_host }}           # https://app.kosli.com
+  KOSLI_ORG:       ${{ inputs.kosli_org }}            # cyber-dojo
+  KOSLI_FLOW:      ${{ inputs.kosli_flow }}           # saver-ci
+  KOSLI_TRAIL:     ${{ inputs.kosli_trail }}
+
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+  AWS_REGION:     ${{ vars.AWS_REGION }}
+
+jobs:
+
+  # Gate the build on this repo's own rego policy tests. Runs before the build
+  # jobs (which need it), so a broken policy fails here before any image is built or
+  # pushed. The tests need jq (preinstalled), the kosli CLI and opa; they call
+  # `kosli evaluate input` and `opa eval`, which make no API calls, so no token
+  # is required.
+  test-policies:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout reusable-actions-workflows
+        uses: actions/checkout@v6
+        with:
+          repository: cyber-dojo/reusable-actions-workflows
+          ref: main
+
+      - name: Setup Kosli CLI
+        uses: kosli-dev/setup-cli-action@v5
+        with:
+          version: ${{ inputs.kosli_cli_version }}
+
+      # setup-opa takes a literal version, so read the pin out of test.env
+      # rather than repeat it here and let the two drift apart.
+      - name: Read the OPA pin from test.env
+        id: pin
+        shell: bash
+        run: |
+          source test.env
+          echo "opa-version=${OPA_VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@v2.4.0
+        with:
+          version: ${{ steps.pin.outputs.opa-version }}
+
+      - name: Run rego policy tests
+        shell: bash
+        run: make test-provenance test-sbom
+
+  # Each platform is built on a runner of that platform, so nothing is emulated,
+  # and pushed to ECR by digest alone, with its own provenance and SBOM.
+  # create-index then names those digests in one index under the real tags.
+  # The two build jobs differ only in runs-on, the platform, and the if.
+  build-amd64:
+    needs: test-policies
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.docker_build.outputs.digest }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/gh_actions_services
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 2400
+          role-session-name: ${{ github.event.repository.name }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.checkout_repository }}
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: ${{ inputs.checkout_fetch_depth }}
+
+      - name: Download the linux/amd64 runtime
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.runtime_artifact_prefix }}-amd64
+          path: ${{ runner.temp }}/runtime-artifact
+
+      - name: Unpack it to an OCI layout
+        run: |
+          mkdir -p "${{ runner.temp }}/runtime"
+          tar --extract --file="${{ runner.temp }}/runtime-artifact/runtime.tar" \
+              --directory="${{ runner.temp }}/runtime"
+
+      - name: Build and push the linux/amd64 image by digest
+        id: docker_build
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ inputs.build_context }}
+          file: ${{ inputs.dockerfile }}
+          target: ${{ inputs.target }}
+          build-contexts: ${{ inputs.runtime_stage }}=oci-layout://${{ runner.temp }}/runtime
+          platforms: linux/amd64
+          no-cache: true
+          outputs: type=image,name=${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=true
+          build-args: ${{ inputs.image_build_args }}
+          provenance: mode=max
+          sbom: true
+
+  build-arm64:
+    needs: test-policies
+    if: ${{ contains(inputs.platforms, 'linux/arm64') }}
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      digest: ${{ steps.docker_build.outputs.digest }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/gh_actions_services
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 2400
+          role-session-name: ${{ github.event.repository.name }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.checkout_repository }}
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: ${{ inputs.checkout_fetch_depth }}
+
+      - name: Download the linux/arm64 runtime
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.runtime_artifact_prefix }}-arm64
+          path: ${{ runner.temp }}/runtime-artifact
+
+      - name: Unpack it to an OCI layout
+        run: |
+          mkdir -p "${{ runner.temp }}/runtime"
+          tar --extract --file="${{ runner.temp }}/runtime-artifact/runtime.tar" \
+              --directory="${{ runner.temp }}/runtime"
+
+      - name: Build and push the linux/arm64 image by digest
+        id: docker_build
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ inputs.build_context }}
+          file: ${{ inputs.dockerfile }}
+          target: ${{ inputs.target }}
+          build-contexts: ${{ inputs.runtime_stage }}=oci-layout://${{ runner.temp }}/runtime
+          platforms: linux/arm64
+          no-cache: true
+          outputs: type=image,name=${{ inputs.image_name }},push-by-digest=true,name-canonical=true,push=true
+          build-args: ${{ inputs.image_build_args }}
+          provenance: mode=max
+          sbom: true
+
+  # Runs only if every platform asked for built and pushed, so a failure on any
+  # one publishes no tag at all. The condition is spelled out because
+  # build-arm64 is skipped when only linux/amd64 is asked for, and a skipped
+  # dependency would otherwise skip this job too.
+  create-index:
+    needs: [build-amd64, build-arm64]
+    if: >-
+      always() &&
+      needs.build-amd64.result == 'success' &&
+      (!contains(inputs.platforms, 'linux/arm64') || needs.build-arm64.result == 'success')
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.create-index.outputs.digest }}
+      tagged_image_name: ${{ inputs.image_name }}:${{ inputs.image_tag }}
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/gh_actions_services
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 2400
+          role-session-name: ${{ github.event.repository.name }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # kosli attest artifact reads the commit from the git repo in the working
+      # directory. Before any file this job writes, as checkout cleans it.
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.checkout_repository }}
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: ${{ inputs.checkout_fetch_depth }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.docker_user }}
+          password: ${{ secrets.docker_pass }}
+
+      # One index, written under every tag, so ECR and Docker Hub hold the same
+      # bytes and so the same digest. imagetools copies the blobs Docker Hub
+      # lacks from ECR itself. Each platform's attestation manifest comes along.
+      - name: Create the multi-platform index
+        id: create-index
+        env:
+          IMAGE_NAME: ${{ inputs.image_name }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          AMD64_DIGEST: ${{ needs.build-amd64.outputs.digest }}
+          ARM64_DIGEST: ${{ needs.build-arm64.outputs.digest }}
+        run: |
+          TAGS=(--tag "${IMAGE_NAME}:${IMAGE_TAG}")
+          TAGS+=(--tag "cyberdojo/${IMAGE_NAME##*/}:${IMAGE_TAG}")
+          REFS=("${IMAGE_NAME}@${AMD64_DIGEST}")
+          if [ -n "${ARM64_DIGEST}" ]; then
+            REFS+=("${IMAGE_NAME}@${ARM64_DIGEST}")
+          fi
+          docker buildx imagetools create "${TAGS[@]}" "${REFS[@]}"
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE_NAME}:${IMAGE_TAG}" \
+                     --format '{{ json .Manifest }}' | jq -r .digest | sed 's/^sha256://')
+          echo "DIGEST=${DIGEST}" >> "${GITHUB_ENV}"
+          echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
+
+      - name: Save Docker image ready to upload
+        run: |          
+          docker pull ${{ inputs.image_name }}:${{ inputs.image_tag }}
+          docker image save ${{ inputs.image_name }}:${{ inputs.image_tag }} --output ${{ runner.temp }}/${{ env.DIGEST }}.tar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.DIGEST }}
+          path: ${{ runner.temp }}/${{ env.DIGEST }}.tar
+
+      # A one-platform build has a single SBOM. A multi-platform build has one SBOM
+      # per platform, keyed by platform, and the linux/amd64 one is evaluated.
+      - name: Get SBOM file
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          if [[ "${PLATFORMS}" == *,* ]]; then
+            FORMAT='{{ json (index .SBOM "linux/amd64").SPDX }}'
+          else
+            FORMAT='{{ json .SBOM.SPDX }}'
+          fi
+          docker buildx imagetools inspect "${{ inputs.image_name }}@sha256:${DIGEST}" \
+            --format "${FORMAT}" > sbom.spdx.json
+
+      # Attest the image and SBOM to GitHub and Kosli, distill provenance and
+      # SBOM facts, evaluate them against SDLC-CTRL-0002 and SDLC-CTRL-0004, and
+      # attest the two decisions. Shared with secure-start-point-build.yml. Reads
+      # sbom.spdx.json, ${{ env.DIGEST }} and the KOSLI_* env vars set above.
+      - name: Attest and evaluate
+        if: ${{ success() || failure() }}
+        uses: cyber-dojo/reusable-actions-workflows/.github/actions/attest-and-evaluate@main
+        with:
+          image_name: ${{ inputs.image_name }}
+          image_tag: ${{ inputs.image_tag }}
+          kosli_reference_name: ${{ inputs.kosli_reference_name }}
+          digest: ${{ env.DIGEST }}
+          attest_to_kosli: ${{ inputs.attest_to_kosli }}
+          kosli_cli_version: ${{ inputs.kosli_cli_version }}
