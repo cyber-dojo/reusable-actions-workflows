@@ -92,7 +92,7 @@ jobs:
 
       - name: Restore the bare image built from these instructions
         id: cached
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/bare-image.tar
           key: ${{ inputs.artifact_prefix }}-amd64-${{ steps.hash.outputs.hash }}
@@ -115,7 +115,7 @@ jobs:
 
       - name: Cache the bare image built from these instructions
         if: ${{ steps.cached.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/bare-image.tar
           key: ${{ inputs.artifact_prefix }}-amd64-${{ steps.hash.outputs.hash }}
@@ -167,7 +167,7 @@ jobs:
 
       - name: Restore the bare image built from these instructions
         id: cached
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/bare-image.tar
           key: ${{ inputs.artifact_prefix }}-arm64-${{ steps.hash.outputs.hash }}
@@ -190,7 +190,7 @@ jobs:
 
       - name: Cache the bare image built from these instructions
         if: ${{ steps.cached.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/bare-image.tar
           key: ${{ inputs.artifact_prefix }}-arm64-${{ steps.hash.outputs.hash }}
