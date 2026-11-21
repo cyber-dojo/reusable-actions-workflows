@@ -1,0 +1,215 @@
+name: Build a bare image
+
+# Builds a bare image, one per platform: the Dockerfile's stage named by
+# bare_image_stage (eg base), the OS packages, the language and its
+# libraries, with no source code. The caller runs its unit tests in one, and
+# secure-docker-build-from-bare-image.yml builds the deployed image FROM
+# them. A bare image is never published, and has no provenance or SBOM: only
+# the deployed image does.
+#
+# Each platform's bare image is uploaded as the artifact
+# <artifact_prefix>-<arch>, holding bare-image.tar, an OCI layout whose image
+# is named <artifact_prefix>:local (so docker load names it), and its digest
+# is output as digest_<arch>, so its consumers can check they have it.
+#
+# Each is cached by a hash of the bare image stage's instructions, its lines
+# up to the FROM <bare_image_stage> that starts the next stage, without
+# comments or blank lines. A cache hit skips the build. A miss builds with
+# no layer cache, so unpinned packages (eg apk add git) are as new as the
+# last change to those instructions; to refresh them, change an instruction
+# (eg bump an ARG).
+
+on:
+  workflow_call:
+    outputs:
+      digest_amd64:
+        description: "The linux/amd64 bare image's OCI manifest digest, eg sha256:..."
+        value: ${{ jobs.build-amd64.outputs.digest }}
+      digest_arm64:
+        description: "The linux/arm64 bare image's OCI manifest digest; empty when not built"
+        value: ${{ jobs.build-arm64.outputs.digest }}
+
+    inputs:
+      checkout_repository:
+        required: true
+        type: string        # eg cyber-dojo/saver
+      checkout_ref:
+        required: true
+        type: string        # eg ${{ github.sha }}
+      build_context:
+        required: false
+        type: string        # eg services/foo (defaults to repo root)
+        default: .
+      dockerfile:
+        required: false
+        type: string        # eg services/foo/Dockerfile (defaults to ./Dockerfile)
+        default: ./Dockerfile
+      bare_image_stage:
+        required: false
+        type: string        # the Dockerfile stage that is the bare image
+        default: base
+      artifact_prefix:
+        required: true
+        type: string        # eg saver-bare-image (artifacts saver-bare-image-amd64, -arm64)
+      platforms:
+        required: false
+        type: string        # eg linux/amd64
+        default: linux/amd64,linux/arm64
+
+jobs:
+
+  # The cache key, decided once for both platforms.
+  hash:
+    runs-on: ubuntu-latest
+    outputs:
+      hash: ${{ steps.hash.outputs.hash }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.checkout_repository }}
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: 1
+
+      - name: Hash the bare image stage's instructions
+        id: hash
+        env:
+          DOCKERFILE: ${{ inputs.dockerfile }}
+          NEXT_FROM: FROM ${{ inputs.bare_image_stage }}
+        run: |
+          grep --quiet --line-regexp --fixed-strings "${NEXT_FROM}" "${DOCKERFILE}" \
+            || { echo "No '${NEXT_FROM}' line in ${DOCKERFILE}"; exit 1; }
+          HASH="$(awk -v next_from="${NEXT_FROM}" '{print} $0 == next_from {exit}' "${DOCKERFILE}" \
+                  | grep --invert-match --extended-regexp '^[[:space:]]*(#|$)' \
+                  | sha256sum | cut --delimiter=' ' --fields=1)"
+          echo "hash=${HASH}" >> "${GITHUB_OUTPUT}"
+
+  # The two build jobs differ only in runs-on, the platform, and the if.
+  build-amd64:
+    needs: hash
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.checkout_repository }}
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: 1
+
+      - name: Restore the bare image built from these instructions
+        id: cached
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/bare-image.tar
+          key: ${{ inputs.artifact_prefix }}-amd64-${{ needs.hash.outputs.hash }}
+
+      - if: ${{ steps.cached.outputs.cache-hit != 'true' }}
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build the bare image as an OCI layout
+        if: ${{ steps.cached.outputs.cache-hit != 'true' }}
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ inputs.build_context }}
+          file: ${{ inputs.dockerfile }}
+          target: ${{ inputs.bare_image_stage }}
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
+          no-cache: true
+          outputs: type=oci,dest=${{ runner.temp }}/bare-image.tar,name=${{ inputs.artifact_prefix }}:local
+
+      - name: Cache the bare image built from these instructions
+        if: ${{ steps.cached.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/bare-image.tar
+          key: ${{ inputs.artifact_prefix }}-amd64-${{ needs.hash.outputs.hash }}
+
+      - name: Read its digest
+        id: digest
+        run: |
+          DIGEST="$(tar --extract --to-stdout --file="${{ runner.temp }}/bare-image.tar" index.json \
+                    | jq --raw-output '.manifests[0].digest')"
+          echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload the bare image
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact_prefix }}-amd64
+          path: ${{ runner.temp }}/bare-image.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  build-arm64:
+    needs: hash
+    if: ${{ contains(inputs.platforms, 'linux/arm64') }}
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.checkout_repository }}
+          ref: ${{ inputs.checkout_ref }}
+          fetch-depth: 1
+
+      - name: Restore the bare image built from these instructions
+        id: cached
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/bare-image.tar
+          key: ${{ inputs.artifact_prefix }}-arm64-${{ needs.hash.outputs.hash }}
+
+      - if: ${{ steps.cached.outputs.cache-hit != 'true' }}
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build the bare image as an OCI layout
+        if: ${{ steps.cached.outputs.cache-hit != 'true' }}
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ inputs.build_context }}
+          file: ${{ inputs.dockerfile }}
+          target: ${{ inputs.bare_image_stage }}
+          platforms: linux/arm64
+          provenance: false
+          sbom: false
+          no-cache: true
+          outputs: type=oci,dest=${{ runner.temp }}/bare-image.tar,name=${{ inputs.artifact_prefix }}:local
+
+      - name: Cache the bare image built from these instructions
+        if: ${{ steps.cached.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/bare-image.tar
+          key: ${{ inputs.artifact_prefix }}-arm64-${{ needs.hash.outputs.hash }}
+
+      - name: Read its digest
+        id: digest
+        run: |
+          DIGEST="$(tar --extract --to-stdout --file="${{ runner.temp }}/bare-image.tar" index.json \
+                    | jq --raw-output '.manifests[0].digest')"
+          echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload the bare image
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact_prefix }}-arm64
+          path: ${{ runner.temp }}/bare-image.tar
+          if-no-files-found: error
+          retention-days: 1

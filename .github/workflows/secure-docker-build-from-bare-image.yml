@@ -70,6 +70,16 @@ on:
         required: false
         type: string        # the Dockerfile stage the bare image replaces
         default: base
+      # Each bare image's OCI manifest digest, as build-bare-image.yml outputs
+      # it. Each platform's build fails unless the bare image it downloaded
+      # has this digest, so the deployed image is built FROM the bare image
+      # the caller tested. Empty only for a platform not built.
+      bare_image_digest_amd64:
+        required: true
+        type: string        # eg sha256:2fc7...
+      bare_image_digest_arm64:
+        required: true
+        type: string        # eg sha256:9a1b... ('' when linux/arm64 is not in platforms)
 
       # inputs for Kosli CLI commands
       kosli_flow:
@@ -221,11 +231,18 @@ jobs:
           name: ${{ inputs.bare_image_artifact_prefix }}-amd64
           path: ${{ runner.temp }}/bare-image-artifact
 
-      - name: Unpack it to an OCI layout
+      - name: Unpack it to an OCI layout, checking its digest
+        env:
+          EXPECTED: ${{ inputs.bare_image_digest_amd64 }}
         run: |
           mkdir -p "${{ runner.temp }}/bare-image"
           tar --extract --file="${{ runner.temp }}/bare-image-artifact/bare-image.tar" \
               --directory="${{ runner.temp }}/bare-image"
+          ACTUAL="$(jq --raw-output '.manifests[0].digest' "${{ runner.temp }}/bare-image/index.json")"
+          if [ -z "${EXPECTED}" ] || [ "${ACTUAL}" != "${EXPECTED}" ]; then
+            echo "linux/amd64 bare image digest is '${ACTUAL}', expected '${EXPECTED}'"
+            exit 1
+          fi
 
       - name: Build and push the linux/amd64 image by digest
         id: docker_build
@@ -283,11 +300,18 @@ jobs:
           name: ${{ inputs.bare_image_artifact_prefix }}-arm64
           path: ${{ runner.temp }}/bare-image-artifact
 
-      - name: Unpack it to an OCI layout
+      - name: Unpack it to an OCI layout, checking its digest
+        env:
+          EXPECTED: ${{ inputs.bare_image_digest_arm64 }}
         run: |
           mkdir -p "${{ runner.temp }}/bare-image"
           tar --extract --file="${{ runner.temp }}/bare-image-artifact/bare-image.tar" \
               --directory="${{ runner.temp }}/bare-image"
+          ACTUAL="$(jq --raw-output '.manifests[0].digest' "${{ runner.temp }}/bare-image/index.json")"
+          if [ -z "${EXPECTED}" ] || [ "${ACTUAL}" != "${EXPECTED}" ]; then
+            echo "linux/arm64 bare image digest is '${ACTUAL}', expected '${EXPECTED}'"
+            exit 1
+          fi
 
       - name: Build and push the linux/arm64 image by digest
         id: docker_build
