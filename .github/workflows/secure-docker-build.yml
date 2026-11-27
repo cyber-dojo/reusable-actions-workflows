@@ -147,7 +147,7 @@ jobs:
 
       - name: Run rego policy tests
         shell: bash
-        run: make test-provenance test-sbom
+        run: make test-provenance test-sbom test-bare-image-hash
 
   # Each platform is built on a runner of that platform, so nothing is emulated,
   # and pushed to ECR by digest alone, with its own provenance and SBOM.

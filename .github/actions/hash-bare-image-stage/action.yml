@@ -1,0 +1,33 @@
+name: Hash a bare image stage
+description: >
+  Outputs the sha256 of a Dockerfile's bare image stage instructions, as
+  bare_image_stage_instructions.sh prints them, for build-bare-image.yml to
+  cache the bare image by. tests/ pins which lines those are.
+
+inputs:
+  dockerfile:
+    required: true
+    description: "eg ./Dockerfile, relative to the caller's checkout"
+  bare_image_stage:
+    required: true
+    description: "The Dockerfile stage that is the bare image, eg base"
+
+outputs:
+  hash:
+    description: "The sha256 of the bare image stage's instructions"
+    value: ${{ steps.hash.outputs.hash }}
+
+runs:
+  using: composite
+  steps:
+    - name: Hash the bare image stage's instructions
+      id: hash
+      shell: bash
+      env:
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        STAGE: ${{ inputs.bare_image_stage }}
+        SCRIPT: ${{ github.action_path }}/bare_image_stage_instructions.sh
+      run: |
+        INSTRUCTIONS="$("${SCRIPT}" "${DOCKERFILE}" "${STAGE}")"
+        HASH="$(sha256sum <<<"${INSTRUCTIONS}" | cut --delimiter=' ' --fields=1)"
+        echo "hash=${HASH}" >> "${GITHUB_OUTPUT}"
