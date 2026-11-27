@@ -1,17 +1,18 @@
 name: Secure start-point build
 
-# Variant of secure-docker-build.yml for cyber-dojo start-point images, which are
-# NOT built from a Dockerfile via docker/build-push-action but by running
-# `cyber-dojo start-point create` (invoked here through the caller repo's
-# `make image`). Because there is no buildkit build, the two things buildkit gave
-# secure-docker-build.yml for free are produced explicitly instead:
+# Variant of secure-docker-build-from-bare-image.yml for cyber-dojo start-point
+# images, which are NOT built from a Dockerfile via docker/build-push-action but
+# by running `cyber-dojo start-point create` (invoked here through the caller
+# repo's `make image`). Because there is no buildkit build, the two things
+# buildkit gives that workflow for free are produced explicitly instead:
 #   - the SBOM: generated with syft against the built image (SPDX 2.3, same as
 #     buildkit's embedded syft-scanner), rather than `sbom: true`.
 #   - there is no SLSA provenance predicate (`provenance: mode=max`), so the
 #     provenance decision is not given a provenance.json attachment.
 # Everything downstream (Kosli attest artifact / provenance / sbom, the distill,
-# evaluate and decision steps) is shared with secure-docker-build.yml through the
-# attest-and-evaluate composite action.
+# evaluate and decision steps) is shared with
+# secure-docker-build-from-bare-image.yml through the attest-and-evaluate
+# composite action.
 
 on:
   workflow_call:
@@ -356,7 +357,8 @@ jobs:
 
       # Attest the image and SBOM to GitHub and Kosli, distill provenance and
       # SBOM facts, evaluate them against SDLC-CTRL-0002 and SDLC-CTRL-0004, and
-      # attest the two decisions. Shared with secure-docker-build.yml. Reads
+      # attest the two decisions. Shared with
+      # secure-docker-build-from-bare-image.yml. Reads
       # sbom.spdx.json, ${{ env.DIGEST }} and the KOSLI_* env vars set above.
       - name: Attest and evaluate
         if: ${{ success() || failure() }}

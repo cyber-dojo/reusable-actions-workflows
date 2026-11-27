@@ -1,16 +1,17 @@
 name: Secure docker build, FROM a bare image
 
-# secure-docker-build.yml, except that each platform's deployed image is built
-# FROM a bare image the caller has already built, and run its unit tests in.
+# Builds a service's deployed image, one per platform, FROM a bare image the
+# caller has already built (build-bare-image.yml), and run its unit tests in.
 # A bare image is the Dockerfile's stage named by bare_image_stage (eg base):
 # the OS packages, the language and its libraries, with no source code. That
 # stage is replaced, by --build-context, with the OCI layout the caller
 # uploaded as the artifact <bare_image_artifact_prefix>-<arch> (eg
 # saver-bare-image-amd64), holding it as bare-image.tar (docker buildx build
 # --target base --output type=oci,dest=bare-image.tar). So the deployed
-# image's layers start with the bare image's, exactly. Everything else
-# (no-cache, provenance, SBOM, the index, the Kosli attestations and
-# evaluations) is as secure-docker-build.yml does it.
+# image's layers start with the bare image's, exactly. Each platform is built
+# with no cache, with SLSA provenance and an SBOM; create-index joins them in
+# one index, pushed to ECR and Docker Hub; and the attest-and-evaluate action
+# attests and evaluates it in Kosli.
 
 on:
   workflow_call:
