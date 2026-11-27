@@ -7,13 +7,16 @@
 # fixtures/custom-start-points-provenance.json is the real bundle from a
 # cyber-dojo custom-start-points build. Tests distill it through the SAME
 # provenance-facts.jq the workflow uses, then wrap the facts in a trail and
-# evaluate with `kosli evaluate input` (no API calls). Negative cases mutate
+# evaluate with `opa eval` (no API calls). Negative cases mutate
 # either the distilled facts or the trail values they are cross-checked against.
 
 readonly my_dir="$(cd "$(dirname "${0}")" && pwd)"
 readonly control_dir="$(cd "${my_dir}/.." && pwd)"
 
-readonly REGO="${control_dir}/slsa-provenance.rego"
+# Defines _opa, and W, the prefix a path given to _opa must carry.
+. "${control_dir}/../bin/lib-opa.sh"
+
+readonly REGO="${W}/SDLC-CTRL-0002/slsa-provenance.rego"
 readonly DISTILL="${control_dir}/provenance-facts.jq"
 readonly FIXTURE="${my_dir}/fixtures/custom-start-points-provenance.json"
 
@@ -193,13 +196,14 @@ test_deny_when_predicate_type_is_not_allowed()
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+# Evaluate a complete policy input (trail JSON) against the rego. The params go
+# in the query rather than a file, so a Docker opa needs no mount but the repo.
 evaluate_input()
 {
-  echo "${1}" | kosli evaluate input \
-    --policy "${REGO}" \
-    --params "${PARAMS}" \
-    --output json \
-    >"${stdoutF}" 2>"${stderrF}"
+  _opa eval --stdin-input --format raw \
+    --data "${REGO}" \
+    "{\"allow\": data.policy.allow, \"violations\": data.policy.violations} with data.params as ${PARAMS}" \
+    <<<"${1}" >"${stdoutF}" 2>"${stderrF}"
   echo $? >"${statusF}"
 }
 

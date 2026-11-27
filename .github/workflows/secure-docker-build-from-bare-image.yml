@@ -145,9 +145,8 @@ jobs:
 
   # Gate the build on this repo's own rego policy tests. Runs before the build
   # jobs (which need it), so a broken policy fails here before any image is built or
-  # pushed. The tests need jq (preinstalled), the kosli CLI and opa; they call
-  # `kosli evaluate input` and `opa eval`, which make no API calls, so no token
-  # is required.
+  # pushed. The tests need jq (preinstalled) and opa; they call `opa eval`,
+  # which makes no API calls, so no token is required.
   test-policies:
     runs-on: ubuntu-latest
     permissions:
@@ -163,11 +162,6 @@ jobs:
         with:
           repository: cyber-dojo/reusable-actions-workflows
           ref: main
-
-      - name: Setup Kosli CLI
-        uses: kosli-dev/setup-cli-action@v5
-        with:
-          version: ${{ inputs.kosli_cli_version }}
 
       # setup-opa takes a literal version, so read the pin out of test.env
       # rather than repeat it here and let the two drift apart.
