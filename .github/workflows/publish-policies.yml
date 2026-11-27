@@ -57,7 +57,7 @@ jobs:
           version: ${{ steps.pin.outputs.opa-version }}
 
       - name: Run rego policy tests
-        run: make test-provenance test-sbom
+        run: make test-provenance test-sbom test-bare-image-hash
 
   # Both policies are published whichever one changed: Kosli stores no new
   # version for unchanged files.

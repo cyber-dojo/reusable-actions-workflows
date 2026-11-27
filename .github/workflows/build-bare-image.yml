@@ -12,9 +12,9 @@ name: Build a bare image
 # is named <artifact_prefix>:local (so docker load names it), and its digest
 # is output as digest_<arch>, so its consumers can check they have it.
 #
-# Each is cached by a hash of the bare image stage's instructions, its lines
-# up to the FROM <bare_image_stage> that starts the next stage, without
-# comments or blank lines. A cache hit skips the build. A miss builds with
+# Each is cached by a hash of the bare image stage's instructions, as the
+# hash-bare-image-stage action computes it (its tests pin which lines those
+# are). A cache hit skips the build. A miss builds with
 # no layer cache, so unpinned packages (eg apk add git) are as new as the
 # last change to those instructions; to refresh them, change an instruction
 # (eg bump an ARG).
@@ -79,16 +79,10 @@ jobs:
 
       - name: Hash the bare image stage's instructions
         id: hash
-        env:
-          DOCKERFILE: ${{ inputs.dockerfile }}
-          NEXT_FROM: FROM ${{ inputs.bare_image_stage }}
-        run: |
-          grep --quiet --line-regexp --fixed-strings "${NEXT_FROM}" "${DOCKERFILE}" \
-            || { echo "No '${NEXT_FROM}' line in ${DOCKERFILE}"; exit 1; }
-          HASH="$(awk -v next_from="${NEXT_FROM}" '{print} $0 == next_from {exit}' "${DOCKERFILE}" \
-                  | grep --invert-match --extended-regexp '^[[:space:]]*(#|$)' \
-                  | sha256sum | cut --delimiter=' ' --fields=1)"
-          echo "hash=${HASH}" >> "${GITHUB_OUTPUT}"
+        uses: cyber-dojo/reusable-actions-workflows/.github/actions/hash-bare-image-stage@main
+        with:
+          dockerfile: ${{ inputs.dockerfile }}
+          bare_image_stage: ${{ inputs.bare_image_stage }}
 
       - name: Restore the bare image built from these instructions
         id: cached
@@ -154,16 +148,10 @@ jobs:
 
       - name: Hash the bare image stage's instructions
         id: hash
-        env:
-          DOCKERFILE: ${{ inputs.dockerfile }}
-          NEXT_FROM: FROM ${{ inputs.bare_image_stage }}
-        run: |
-          grep --quiet --line-regexp --fixed-strings "${NEXT_FROM}" "${DOCKERFILE}" \
-            || { echo "No '${NEXT_FROM}' line in ${DOCKERFILE}"; exit 1; }
-          HASH="$(awk -v next_from="${NEXT_FROM}" '{print} $0 == next_from {exit}' "${DOCKERFILE}" \
-                  | grep --invert-match --extended-regexp '^[[:space:]]*(#|$)' \
-                  | sha256sum | cut --delimiter=' ' --fields=1)"
-          echo "hash=${HASH}" >> "${GITHUB_OUTPUT}"
+        uses: cyber-dojo/reusable-actions-workflows/.github/actions/hash-bare-image-stage@main
+        with:
+          dockerfile: ${{ inputs.dockerfile }}
+          bare_image_stage: ${{ inputs.bare_image_stage }}
 
       - name: Restore the bare image built from these instructions
         id: cached
